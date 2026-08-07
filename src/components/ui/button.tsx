@@ -33,7 +33,8 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors",
+        // pill jak CTA na dre.pl
+        "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-colors",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dre-500",
         "disabled:cursor-not-allowed",
         variants[variant],

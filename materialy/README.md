@@ -32,6 +32,13 @@ PDF (lub inne pliki) z wiedzą produktową: budowa drzwi, okleiny, przylgowe /
 bezprzylgowe, ramowe / płytowe itd. Na tej podstawie przygotujemy pulę pytań
 teoretycznych ABCD (trafi do `teoria/` do Twojej akceptacji).
 
+## 📁 `branding/` — referencje wyglądu
+
+Screeny strony dre.pl i inne materiały brandowe (logo, księga znaku).
+Na ich podstawie kalibrujemy wygląd aplikacji — kolory z `visual01/02.png`
+są już zdjęte pikselowo i wpisane w design tokens
+(`#fd7e14`, `#f3ab4e`, `#373737`).
+
 ## 📁 `teoria/` — pytania teoretyczne (JSON)
 
 Gotowa pula pytań ABCD w formacie:

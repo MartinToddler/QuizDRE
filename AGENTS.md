@@ -39,7 +39,9 @@ Materiały źródłowe → `materialy/` (patrz `materialy/README.md`), importery
 
 - Komponenty UI: własne, w `src/components/ui` (bez shadcn — rejestr
   niedostępny w środowisku buildowym). Paleta DRE w `src/app/globals.css`
-  (`--color-dre-*`), pomarańcz roboczy `#f07818`.
+  (`--color-dre-*`): pomarańcz `#fd7e14`, bursztyn `#f3ab4e`, antracyt
+  `#373737` — zdjęte pikselowo ze screenów dre.pl w `materialy/branding/`.
+  Przyciski: pill (rounded-full), jak CTA na stronie DRE.
 - Copy narratora: `src/lib/engine/narrator.ts` — pisane neutralnie płciowo
   (bez form czasu przeszłego 2. osoby), mało emoji.
 - Trasy po polsku: `/logowanie`, `/rejestracja`, `/quiz`, `/ranking`,

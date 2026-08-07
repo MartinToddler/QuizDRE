@@ -2,19 +2,21 @@
 
 /*
  * Paleta DRE: białe tło, szare elementy, pomarańczowe akcenty.
- * Roboczy pomarańcz #F07818 — do potwierdzenia z księgą znaku DRE.
+ * Kolory zdjęte pikselowo ze screenów dre.pl (materialy/branding/):
+ * #fd7e14 — główny pomarańcz CTA, #f3ab4e — bursztyn banerowy,
+ * #373737 — antracyt tekstu.
  */
 @theme {
-  --color-dre-50: #fef4ea;
-  --color-dre-100: #fde5cc;
-  --color-dre-200: #fbc999;
-  --color-dre-300: #f8a95f;
-  --color-dre-400: #f48d33;
-  --color-dre-500: #f07818;
-  --color-dre-600: #d96a0f;
-  --color-dre-700: #b3560c;
-  --color-dre-800: #8c430b;
-  --color-dre-900: #6e350c;
+  --color-dre-50: #fff4e8;
+  --color-dre-100: #ffe4c8;
+  --color-dre-200: #fec894;
+  --color-dre-300: #f3ab4e;
+  --color-dre-400: #fd9440;
+  --color-dre-500: #fd7e14;
+  --color-dre-600: #e26e08;
+  --color-dre-700: #b95805;
+  --color-dre-800: #8f4406;
+  --color-dre-900: #6d3407;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -62,7 +64,7 @@
 
 body {
   background: #ffffff;
-  color: #1f2937;
+  color: #373737;
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
 }

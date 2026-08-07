@@ -12,7 +12,7 @@ export function ConfettiBurst({ big = false }: { big?: boolean }) {
         particleCount: big ? 160 : 80,
         spread: big ? 100 : 70,
         origin: { y: 0.6 },
-        colors: ["#f07818", "#f8a95f", "#6b7280", "#ffffff"],
+        colors: ["#fd7e14", "#f3ab4e", "#6b7280", "#ffffff"],
       });
       if (big) {
         setTimeout(
@@ -22,7 +22,7 @@ export function ConfettiBurst({ big = false }: { big?: boolean }) {
               angle: 60,
               spread: 60,
               origin: { x: 0 },
-              colors: ["#f07818", "#f8a95f"],
+              colors: ["#fd7e14", "#f3ab4e"],
             }),
           250,
         );
@@ -33,7 +33,7 @@ export function ConfettiBurst({ big = false }: { big?: boolean }) {
               angle: 120,
               spread: 60,
               origin: { x: 1 },
-              colors: ["#f07818", "#f8a95f"],
+              colors: ["#fd7e14", "#f3ab4e"],
             }),
           400,
         );

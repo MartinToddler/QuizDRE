@@ -15,7 +15,7 @@ async function main() {
   // Maskable: ikona na pełnym tle z marginesem bezpieczeństwa.
   const inner = await sharp(svg, { density: 300 }).resize(400, 400).png().toBuffer();
   await sharp({
-    create: { width: 512, height: 512, channels: 4, background: "#f07818" },
+    create: { width: 512, height: 512, channels: 4, background: "#fd7e14" },
   })
     .composite([{ input: inner, gravity: "center" }])
     .png()
