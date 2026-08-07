@@ -41,6 +41,10 @@ export interface CatalogParse {
     duplicateRows: string[];
     ambiguous: { rowName: string; feature: string; value: string }[];
     footnoteYes: number;
+    /** Cechy przemianowane sufiksem kategorii (kolizja nazw między grupami). */
+    renamedFeatures: string[];
+    /** Kolumny scalone z wcześniejszą o tej samej nazwie i kategorii. */
+    mergedColumns: string[];
   };
 }
 
@@ -118,13 +122,49 @@ export async function parseCatalogXlsx(
     featureCols.push(c);
   }
 
-  const rows: CatalogRow[] = [];
   const report: CatalogParse["report"] = {
     skippedEmptyRows: [],
     duplicateRows: [],
     ambiguous: [],
     footnoteYes: 0,
+    renamedFeatures: [],
+    mergedColumns: [],
   };
+
+  // Nazwy cech muszą być unikatowe (klucz w bazie). Ta sama nazwa w RÓŻNYCH
+  // kategoriach (np. dekor „Orzech” w grupie cell i CPL) → sufiks kategorii;
+  // powtórka w tej samej kategorii → scalenie kolumn (x wygrywa z pustą).
+  const nameGroups = new Map<string, number[]>();
+  features.forEach((f, i) => {
+    const list = nameGroups.get(f.name) ?? [];
+    list.push(i);
+    nameGroups.set(f.name, list);
+  });
+  for (const idxs of nameGroups.values()) {
+    if (idxs.length < 2) continue;
+    const categories = new Set(idxs.map((i) => features[i].category ?? ""));
+    if (categories.size > 1) {
+      for (const i of idxs) {
+        features[i].name = `${features[i].name} (${features[i].category ?? "inne"})`;
+        report.renamedFeatures.push(features[i].name);
+      }
+    }
+  }
+  const finalFeatures: CatalogFeature[] = [];
+  const finalIndexByName = new Map<string, number>();
+  const colToFinal = features.map((f) => {
+    const existing = finalIndexByName.get(f.name);
+    if (existing !== undefined) {
+      report.mergedColumns.push(f.name);
+      return existing;
+    }
+    const idx = finalFeatures.length;
+    finalFeatures.push(f);
+    finalIndexByName.set(f.name, idx);
+    return idx;
+  });
+
+  const rows: CatalogRow[] = [];
   const seen = new Set<string>();
 
   for (let r = headerRowNo + 1; r <= sheet.rowCount; r++) {
@@ -132,20 +172,21 @@ export async function parseCatalogXlsx(
     const name = cleanRowName(cellText(row.getCell(2)));
     if (!name) continue;
 
-    const values: (boolean | null)[] = [];
+    const values: (boolean | null)[] = new Array(finalFeatures.length).fill(false);
     let filled = 0;
     for (let i = 0; i < featureCols.length; i++) {
       const raw = cellText(row.getCell(featureCols[i]));
       const norm = normalizeCatalogCell(raw);
+      const target = colToFinal[i];
       if (norm === "empty") {
-        values.push(false); // pusta komórka = cecha niedostępna
-      } else if (norm === null) {
-        values.push(null);
-        report.ambiguous.push({ rowName: name, feature: features[i].name, value: raw.trim() });
-        filled += 1;
+        continue; // pusta komórka = cecha niedostępna (false to stan wyjściowy)
+      }
+      filled += 1;
+      if (norm === null) {
+        report.ambiguous.push({ rowName: name, feature: finalFeatures[target].name, value: raw.trim() });
+        if (values[target] !== true) values[target] = null;
       } else {
-        values.push(true);
-        filled += 1;
+        values[target] = true; // x wygrywa przy scalonych kolumnach
         if (/\*/.test(raw)) report.footnoteYes += 1;
       }
     }
@@ -164,7 +205,7 @@ export async function parseCatalogXlsx(
     rows.push({ name, sourceRow: r, values });
   }
 
-  return { sheetName: sheet.name, features, rows, report };
+  return { sheetName: sheet.name, features: finalFeatures, rows, report };
 }
 
 /* ------------------------------------------------------------------ */

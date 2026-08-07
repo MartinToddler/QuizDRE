@@ -38,6 +38,19 @@ describe("parser realnego arkusza katalogu", () => {
     ).toBe(true);
   });
 
+  it("nazwy cech są unikatowe (kolizje między kategoriami dostają sufiks)", async () => {
+    const parsed = await parseCatalogXlsx(XLSX);
+    const names = parsed.features.map((f) => f.name);
+    expect(new Set(names).size).toBe(names.length); // wymóg klucza w bazie
+    // Dekor „Orzech” występuje w grupach cell i CPL → dwie odrębne cechy:
+    expect(names).toContain("Orzech (cell)");
+    expect(names).toContain("Orzech (CPL)");
+    expect(names).not.toContain("Orzech");
+    expect(parsed.report.renamedFeatures).toContain("Orzech (cell)");
+    // Wartości wierszy mają długość zgodną z finalną listą cech:
+    for (const r of parsed.rows) expect(r.values).toHaveLength(names.length);
+  });
+
   it("normalizuje wartości: x/x* = TAK, pusta = NIE, inne = raport", async () => {
     const parsed = await parseCatalogXlsx(XLSX);
     const yes = parsed.rows.reduce(
