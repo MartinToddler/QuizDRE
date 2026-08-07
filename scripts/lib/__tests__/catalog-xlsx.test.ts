@@ -85,6 +85,16 @@ describe("dopasowanie modeli (nazwy zdjęć) do kolekcji", () => {
     expect(match.assignments.get("HAMPTON 20")).toBe("Hampton SUPREME");
   });
 
+  it("alias CITI → City SUPREME (potwierdzony przez DRE)", () => {
+    const match = matchModelsToRows(
+      ["CITI 1", "CITI 2", "CITY 5"],
+      ["City SUPREME", "Arte"],
+    );
+    expect(match.assignments.get("CITI 1")).toBe("City SUPREME");
+    expect(match.assignments.get("CITI 2")).toBe("City SUPREME");
+    expect(match.assignments.get("CITY 5")).toBe("City SUPREME"); // zwykły prefiks
+  });
+
   it("realne zdjęcia z repo pokrywają się z kolekcjami z Excela", async () => {
     const parsed = await parseCatalogXlsx(XLSX);
     const models = photoModelNames();
@@ -99,9 +109,12 @@ describe("dopasowanie modeli (nazwy zdjęć) do kolekcji", () => {
     // dopasowania; próg celowo ostrożny, raport pokaże resztę.
     expect(match.assignments.size / models.length).toBeGreaterThan(0.7);
 
-    // Żaden model nie może trafić do kolekcji o niepasującym prefiksie.
+    // Żaden model nie może trafić do kolekcji o niepasującym prefiksie
+    // (poza jawnie potwierdzonymi aliasami — lista jak CATALOG_ALIASES).
+    const aliasPrefixes = ["CITI"];
     for (const [model, row] of match.assignments) {
       const m = model.toUpperCase();
+      if (aliasPrefixes.some((a) => m === a || m.startsWith(`${a} `))) continue;
       const candidates = [
         row.toUpperCase(),
         ...row.toUpperCase().split("/").map((p) => p.trim()),

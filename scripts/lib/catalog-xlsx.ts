@@ -178,6 +178,15 @@ export interface ModelRowMatch {
   rowsWithoutModels: string[];
 }
 
+/**
+ * Aliasy prefiksów modeli → nazwy kolekcji w katalogu.
+ * Rozbieżności nazewnicze potwierdzone przez DRE.
+ */
+export const CATALOG_ALIASES: Record<string, string> = {
+  // zdjęcia „CITI 1..3” = kolekcja „City SUPREME” (pisownia i/y)
+  CITI: "City SUPREME",
+};
+
 function norm(s: string): string {
   return s.replace(/\s+/g, " ").trim().toUpperCase();
 }
@@ -202,7 +211,9 @@ function rowCandidates(rowName: string): string[] {
 export function matchModelsToRows(
   modelNames: string[],
   rowNames: string[],
+  aliases: Record<string, string> = CATALOG_ALIASES,
 ): ModelRowMatch {
+  const rowByNorm = new Map(rowNames.map((r) => [norm(r), r]));
   // kandydat-prefiks → wiersz; przy konflikcie wygrywa dłuższy prefiks,
   // a przy równych długościach pełna nazwa wiersza przed skróconą.
   const candidateToRow = new Map<string, { row: string; exactness: number }>();
@@ -223,6 +234,20 @@ export function matchModelsToRows(
 
   for (const model of modelNames) {
     const m = norm(model);
+
+    // Aliasy mają pierwszeństwo (jawnie potwierdzone mapowania).
+    const alias = Object.entries(aliases).find(
+      ([prefix]) => m === norm(prefix) || m.startsWith(`${norm(prefix)} `),
+    );
+    if (alias) {
+      const target = rowByNorm.get(norm(alias[1]));
+      if (target) {
+        assignments.set(model, target);
+        usedRows.add(target);
+        continue;
+      }
+    }
+
     let best: { cand: string; row: string } | null = null;
     for (const [cand, target] of candidateToRow) {
       if (m === cand || m.startsWith(`${cand} `)) {
