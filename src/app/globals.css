@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/*
+ * Paleta DRE: białe tło, szare elementy, pomarańczowe akcenty.
+ * Roboczy pomarańcz #F07818 — do potwierdzenia z księgą znaku DRE.
+ */
+@theme {
+  --color-dre-50: #fef4ea;
+  --color-dre-100: #fde5cc;
+  --color-dre-200: #fbc999;
+  --color-dre-300: #f8a95f;
+  --color-dre-400: #f48d33;
+  --color-dre-500: #f07818;
+  --color-dre-600: #d96a0f;
+  --color-dre-700: #b3560c;
+  --color-dre-800: #8c430b;
+  --color-dre-900: #6e350c;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --animate-pop: pop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
+  --animate-shake: shake 0.4s ease-in-out;
+  --animate-rise: rise 0.4s ease-out;
+
+  @keyframes pop {
+    0% {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-6px);
+    }
+    50% {
+      transform: translateX(5px);
+    }
+    75% {
+      transform: translateX(-3px);
+    }
+  }
+  @keyframes rise {
+    0% {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+}
+
+body {
+  background: #ffffff;
+  color: #1f2937;
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
