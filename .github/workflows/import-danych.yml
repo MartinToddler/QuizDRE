@@ -79,9 +79,9 @@ jobs:
           ${{ inputs.proba && '--dry-run' || '' }}
 
       - name: "Import cech z Excela"
-        if: inputs.zakres == 'cechy (excel)'
+        if: inputs.zakres == 'wszystko' || inputs.zakres == 'cechy (excel)'
         run: >
-          npx tsx scripts/import/features.ts --fuzzy
+          npx tsx scripts/import/features.ts
           ${{ inputs.proba && '--dry-run' || '' }}
 
       - name: Podsumowanie

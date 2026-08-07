@@ -4,17 +4,23 @@ Ten folder to skrzynka na dane źródłowe QuizDRE. Wrzuć pliki według poniżs
 zasad (przez stronę GitHuba: **Add file → Upload files**), a skrypty importu
 zamienią je w pytania.
 
-## 📁 `cechy/` — macierz cech modeli (Excel)
+## 📁 `cechy/` — specyfikacja kolekcji (Excel)
 
-Plik `.xlsx` z macierzą **modele × cechy**:
+Obsługiwany format to katalogowy arkusz **„KATALOG specyfikacja
+kolekcji.xlsx”**:
 
-- **wiersze** = modele drzwi (pierwsza kolumna: nazwa modelu),
-- **kolumny** = cechy / rozwiązania techniczne (pierwszy wiersz: nazwa cechy),
-- **komórki**: `TAK` / `NIE` (akceptujemy też `x`, `✓`, `1` / `-`, `0`, puste).
+- wiersz z „kolekcja / dekor KATALOG” = nagłówek, cechy od kolumny 3
+  (kategorie cech w wierszu wyżej),
+- wiersze poniżej = **kolekcje** („Ilis”, „Vetro D2”, „Arte”…); sekcje
+  typu „DRZWI RAMOWE” pomijane są automatycznie,
+- komórki: `x` / `x*` = cecha dostępna, **pusta = niedostępna**,
+  inne wartości (np. `ZN`) są raportowane i pomijane.
 
-Komórki niejednoznaczne są raportowane i pomijane — nie trafią do pytań.
-Jeśli Twój Excel ma inny układ, nic straconego: wrzuć go tak, jak jest,
-a dopasujemy import do formatu.
+Importer bierze pierwszy niepusty arkusz (zwykle najnowsze wydanie
+katalogu); inne wydanie wskażesz flagą `--sheet`. Cechy kolekcji dostają
+wszystkie modele (zdjęcia), których nazwa zaczyna się od nazwy kolekcji —
+najdłuższy prefiks wygrywa, np. `VETRO D2 20` → „Vetro D2”, nie „Vetro E”.
+Modele bez kolekcji i kolekcje bez zdjęć lądują w raporcie importu.
 
 ## 📁 `zdjecia/` — zdjęcia drzwi
 
