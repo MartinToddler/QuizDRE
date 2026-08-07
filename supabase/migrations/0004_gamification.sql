@@ -562,8 +562,49 @@ begin
 end;
 $$;
 
+create or replace function public.get_daily_quiz_leaderboard(p_limit int default 50)
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_date date := (now() at time zone 'Europe/Warsaw')::date;
+  v_top jsonb;
+  v_me jsonb;
+begin
+  with dq as (
+    select id from public.daily_quiz where quiz_date = v_date
+  ),
+  ranked as (
+    select s.user_id, s.correct_count, s.question_count, s.total_time_ms,
+           rank() over (order by s.correct_count desc, s.total_time_ms asc) as rnk
+      from public.quiz_sessions s
+      join dq on s.daily_quiz_id = dq.id
+     where s.status <> 'active'
+  ),
+  enriched as (
+    select r.*, p.display_name, c.name as company_name
+      from ranked r
+      join public.profiles p on p.id = r.user_id
+      left join public.companies c on c.id = p.company_id
+  )
+  select
+    coalesce(jsonb_agg(jsonb_build_object(
+      'rank', e.rnk, 'name', e.display_name, 'company', e.company_name,
+      'score', e.correct_count, 'total', e.question_count,
+      'timeMs', e.total_time_ms, 'isMe', e.user_id = auth.uid())
+      order by e.rnk, e.display_name) filter (where e.rnk <= p_limit), '[]'::jsonb),
+    (select jsonb_build_object('rank', e2.rnk, 'score', e2.correct_count)
+       from enriched e2 where e2.user_id = auth.uid())
+  into v_top, v_me
+  from enriched e;
+
+  return jsonb_build_object('date', v_date, 'top', v_top, 'me', v_me);
+end;
+$$;
+
 grant execute on function
   public.get_leaderboard(text, int),
   public.get_company_leaderboard(),
-  public.get_challenge_leaderboard(int)
+  public.get_challenge_leaderboard(int),
+  public.get_daily_quiz_leaderboard(int)
 to authenticated;

@@ -1,0 +1,467 @@
+import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadCatalogSnapshot, signImagePath } from "@/lib/db/catalog";
+import { createAdminClient } from "@/lib/db/server";
+import {
+  challengeOverComment,
+  composeChallengeBatch,
+  composeDailyQuiz,
+  composeLearningSession,
+  newGenState,
+  perfectComment,
+  pickComment,
+  randomRng,
+  seedFromString,
+  mulberry32,
+  type AnswerValue,
+  type Category,
+  type GeneratedQuestion,
+  type Mode,
+  type QuestionPayload,
+} from "@/lib/engine";
+
+/** Data w strefie Europe/Warsaw jako YYYY-MM-DD (spójna z SQL). */
+export function warsawToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Warsaw",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+export class QuizError extends Error {
+  constructor(
+    public code: string,
+    public status: number,
+  ) {
+    super(code);
+  }
+}
+
+function admin(): SupabaseClient {
+  const db = createAdminClient();
+  if (!db) throw new QuizError("not_configured", 503);
+  return db;
+}
+
+/** Mapowanie wyjątków z funkcji SQL na statusy HTTP. */
+function mapDbError(message: string): QuizError {
+  const known: Record<string, number> = {
+    session_not_found: 404,
+    session_not_active: 409,
+    question_not_found: 404,
+    already_answered: 409,
+    too_fast: 429,
+    no_questions: 503,
+  };
+  for (const [code, status] of Object.entries(known)) {
+    if (message.includes(code)) return new QuizError(code, status);
+  }
+  return new QuizError(`db_error: ${message}`, 500);
+}
+
+export interface ServedQuestion {
+  seq: number;
+  total: number;
+  qtype: string;
+  payload: QuestionPayload;
+  imageUrl: string | null;
+  mode: Mode;
+  correctCount: number;
+}
+
+interface SessionRow {
+  id: string;
+  user_id: string;
+  mode: Mode;
+  status: string;
+  question_count: number;
+  correct_count: number;
+  wrong_count: number;
+}
+
+async function getOwnedSession(
+  db: SupabaseClient,
+  userId: string,
+  sessionId: string,
+): Promise<SessionRow> {
+  const { data, error } = await db
+    .from("quiz_sessions")
+    .select("id, user_id, mode, status, question_count, correct_count, wrong_count")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw mapDbError(error.message);
+  if (!data) throw new QuizError("session_not_found", 404);
+  return data as SessionRow;
+}
+
+function toDbRows(questions: GeneratedQuestion[], startSeq: number) {
+  return questions.map((q, i) => ({
+    seq: startSeq + i,
+    qtype: q.qtype,
+    dedupeKey: q.dedupeKey,
+    payload: q.payload,
+    correctAnswer: q.correctAnswer,
+    explanation: q.explanation,
+    imagePath: q.imagePath,
+  }));
+}
+
+/** Id pytań teoretycznych z ostatnich 3 sesji — unikamy powtórek. */
+async function recentTheoryIds(
+  db: SupabaseClient,
+  userId: string,
+): Promise<Set<string>> {
+  const { data: sessions } = await db
+    .from("quiz_sessions")
+    .select("id")
+    .eq("user_id", userId)
+    .order("started_at", { ascending: false })
+    .limit(3);
+  if (!sessions?.length) return new Set();
+  const { data: rows } = await db
+    .from("session_questions")
+    .select("dedupe_key")
+    .in(
+      "session_id",
+      sessions.map((s) => s.id),
+    )
+    .like("dedupe_key", "t:%");
+  return new Set((rows ?? []).map((r) => r.dedupe_key.slice(2)));
+}
+
+async function serve(
+  db: SupabaseClient,
+  userId: string,
+  session: SessionRow,
+  seq: number,
+): Promise<ServedQuestion> {
+  const { data: q, error } = await db
+    .from("session_questions")
+    .select("seq, qtype, payload, image_path, answered_at")
+    .eq("session_id", session.id)
+    .eq("seq", seq)
+    .maybeSingle();
+  if (error) throw mapDbError(error.message);
+  if (!q) throw new QuizError("question_not_found", 404);
+  if (q.answered_at) throw new QuizError("already_answered", 409);
+
+  const { error: e2 } = await db.rpc("mark_question_served", {
+    p_user_id: userId,
+    p_session_id: session.id,
+    p_seq: seq,
+  });
+  if (e2) throw mapDbError(e2.message);
+
+  return {
+    seq: q.seq,
+    total: session.question_count,
+    qtype: q.qtype,
+    payload: q.payload as QuestionPayload,
+    imageUrl: await signImagePath(db, q.image_path),
+    mode: session.mode,
+    correctCount: session.correct_count,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Start sesji                                                         */
+/* ------------------------------------------------------------------ */
+
+export async function startSession(
+  userId: string,
+  mode: Mode,
+  category?: Category,
+): Promise<{ sessionId: string; question: ServedQuestion }> {
+  const db = admin();
+
+  if (mode === "daily") return startDailySession(db, userId);
+
+  const [snapshot, recent] = await Promise.all([
+    loadCatalogSnapshot(db),
+    recentTheoryIds(db, userId),
+  ]);
+  const state = newGenState({ recentTheoryIds: recent });
+  const rng = randomRng();
+
+  const questions =
+    mode === "learning"
+      ? composeLearningSession(snapshot, category ?? "mix", state, rng)
+      : composeChallengeBatch(snapshot, state, rng);
+
+  if (questions.length === 0) throw new QuizError("no_questions", 503);
+
+  const { data: sessionId, error } = await db.rpc("create_session", {
+    p_user_id: userId,
+    p_mode: mode,
+    p_category: mode === "learning" ? (category ?? "mix") : null,
+    p_daily_quiz_id: null,
+    p_questions: toDbRows(questions, 1),
+  });
+  if (error) throw mapDbError(error.message);
+
+  const session = await getOwnedSession(db, userId, sessionId as string);
+  return { sessionId: session.id, question: await serve(db, userId, session, 1) };
+}
+
+async function startDailySession(
+  db: SupabaseClient,
+  userId: string,
+): Promise<{ sessionId: string; question: ServedQuestion }> {
+  const today = warsawToday();
+
+  let { data: daily } = await db
+    .from("daily_quiz")
+    .select("id, questions")
+    .eq("quiz_date", today)
+    .maybeSingle();
+
+  if (!daily) {
+    // Leniwa, deterministyczna generacja; unikat quiz_date czyni ją race-safe.
+    const snapshot = await loadCatalogSnapshot(db);
+    const rng = mulberry32(seedFromString(`quizdre-daily-${today}`));
+    const questions = composeDailyQuiz(snapshot, newGenState(), rng);
+    if (questions.length === 0) throw new QuizError("no_questions", 503);
+    await db
+      .from("daily_quiz")
+      .upsert(
+        { quiz_date: today, questions },
+        { onConflict: "quiz_date", ignoreDuplicates: true },
+      );
+    const re = await db
+      .from("daily_quiz")
+      .select("id, questions")
+      .eq("quiz_date", today)
+      .maybeSingle();
+    daily = re.data;
+  }
+  if (!daily) throw new QuizError("no_questions", 503);
+
+  const { data: existing } = await db
+    .from("quiz_sessions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("daily_quiz_id", daily.id)
+    .maybeSingle();
+  if (existing) throw new QuizError("daily_already_played", 409);
+
+  const questions = daily.questions as GeneratedQuestion[];
+  const { data: sessionId, error } = await db.rpc("create_session", {
+    p_user_id: userId,
+    p_mode: "daily",
+    p_category: null,
+    p_daily_quiz_id: daily.id,
+    p_questions: toDbRows(questions, 1),
+  });
+  if (error) throw mapDbError(error.message);
+
+  const session = await getOwnedSession(db, userId, sessionId as string);
+  return { sessionId: session.id, question: await serve(db, userId, session, 1) };
+}
+
+/* ------------------------------------------------------------------ */
+/* Serwowanie pytania                                                  */
+/* ------------------------------------------------------------------ */
+
+export async function serveQuestion(
+  userId: string,
+  sessionId: string,
+  seq: number,
+): Promise<ServedQuestion> {
+  const db = admin();
+  const session = await getOwnedSession(db, userId, sessionId);
+  if (session.status !== "active") throw new QuizError("session_not_active", 409);
+  return serve(db, userId, session, seq);
+}
+
+/* ------------------------------------------------------------------ */
+/* Odpowiedź                                                           */
+/* ------------------------------------------------------------------ */
+
+export interface AnswerResult {
+  correct: boolean;
+  correctAnswer: AnswerValue;
+  explanation: string | null;
+  comment: string;
+  xp: number;
+  combo: number;
+  milestoneBonus: number;
+  sessionStatus: "active" | "finished";
+  correctCount: number;
+  answeredCount: number;
+  nextQuestion: ServedQuestion | null;
+}
+
+export async function submitAnswer(
+  userId: string,
+  sessionId: string,
+  seq: number,
+  answer: AnswerValue,
+): Promise<AnswerResult> {
+  const db = admin();
+
+  const { data, error } = await db.rpc("submit_answer", {
+    p_user_id: userId,
+    p_session_id: sessionId,
+    p_seq: seq,
+    p_answer: answer,
+  });
+  if (error) throw mapDbError(error.message);
+
+  const res = data as {
+    correct: boolean;
+    correctAnswer: AnswerValue;
+    explanation: string | null;
+    timeMs: number;
+    xp: number;
+    combo: number;
+    milestoneBonus: number;
+    sessionStatus: "active" | "finished";
+    correctCount: number;
+    answeredCount: number;
+  };
+
+  // Kontekst narratora: seria błędów / comeback z ostatnich odpowiedzi.
+  const { data: lastAnswers } = await db
+    .from("session_questions")
+    .select("is_correct")
+    .eq("session_id", sessionId)
+    .not("answered_at", "is", null)
+    .order("seq", { ascending: false })
+    .limit(4);
+  const previous = (lastAnswers ?? []).slice(1).map((r) => r.is_correct);
+  let wrongStreak = 0;
+  if (!res.correct) {
+    wrongStreak = 1;
+    for (const c of previous) {
+      if (c === false) wrongStreak += 1;
+      else break;
+    }
+  }
+  const comeback =
+    res.correct && previous.length >= 2 && !previous[0] && !previous[1];
+
+  const comment = pickComment(randomRng(), {
+    correct: res.correct,
+    timeMs: res.timeMs,
+    combo: res.combo,
+    wrongStreak,
+    comeback,
+  });
+
+  const session = await getOwnedSession(db, userId, sessionId);
+
+  // Wyzwanie: dogeneruj partię, gdy kończą się pytania.
+  if (session.status === "active" && session.mode === "challenge") {
+    const answered = session.correct_count + session.wrong_count;
+    if (session.question_count - answered < 3) {
+      await extendChallenge(db, userId, session);
+    }
+  }
+
+  let nextQuestion: ServedQuestion | null = null;
+  if (session.status === "active") {
+    const fresh = await getOwnedSession(db, userId, sessionId);
+    if (seq + 1 <= fresh.question_count) {
+      nextQuestion = await serve(db, userId, fresh, seq + 1);
+    }
+  }
+
+  return {
+    correct: res.correct,
+    correctAnswer: res.correctAnswer,
+    explanation: res.explanation,
+    comment,
+    xp: res.xp,
+    combo: res.combo,
+    milestoneBonus: res.milestoneBonus,
+    sessionStatus: res.sessionStatus,
+    correctCount: res.correctCount,
+    answeredCount: res.answeredCount,
+    nextQuestion,
+  };
+}
+
+/** Odtwarza stan generatora z bazy i dokłada partię pytań wyzwania. */
+async function extendChallenge(
+  db: SupabaseClient,
+  userId: string,
+  session: SessionRow,
+): Promise<void> {
+  const { data: rows } = await db
+    .from("session_questions")
+    .select("qtype, dedupe_key, correct_answer")
+    .eq("session_id", session.id);
+
+  const usedKeys = new Set<string>();
+  let yesCount = 0;
+  let noCount = 0;
+  const letterCounts: [number, number, number, number] = [0, 0, 0, 0];
+  for (const r of rows ?? []) {
+    usedKeys.add(r.dedupe_key);
+    const ca = r.correct_answer as AnswerValue;
+    if (r.qtype === "feature_yn" && "value" in ca) {
+      if (ca.value === "TAK") yesCount += 1;
+      else noCount += 1;
+    }
+    if ("index" in ca) letterCounts[ca.index] += 1;
+  }
+
+  const [snapshot, recent] = await Promise.all([
+    loadCatalogSnapshot(db),
+    recentTheoryIds(db, userId),
+  ]);
+  const state = newGenState({
+    usedKeys,
+    yesCount,
+    noCount,
+    letterCounts,
+    recentTheoryIds: recent,
+  });
+  const batch = composeChallengeBatch(snapshot, state, randomRng());
+  if (batch.length === 0) return;
+
+  const { error } = await db.rpc("append_questions", {
+    p_user_id: userId,
+    p_session_id: session.id,
+    p_questions: toDbRows(batch, session.question_count + 1),
+  });
+  if (error) throw mapDbError(error.message);
+}
+
+/* ------------------------------------------------------------------ */
+/* Zakończenie                                                         */
+/* ------------------------------------------------------------------ */
+
+export interface FinishResult {
+  summary: Record<string, unknown>;
+  comment: string | null;
+}
+
+export async function finishSession(
+  userId: string,
+  sessionId: string,
+): Promise<FinishResult> {
+  const db = admin();
+  const { data, error } = await db.rpc("finish_session", {
+    p_user_id: userId,
+    p_session_id: sessionId,
+  });
+  if (error) throw mapDbError(error.message);
+
+  const summary = data as Record<string, unknown>;
+  let comment: string | null = null;
+  const rng = randomRng();
+  if (summary.mode === "challenge") {
+    comment = challengeOverComment(
+      rng,
+      Number(summary.correct ?? 0),
+      Boolean(summary.isChallengeRecord),
+    );
+  } else if (summary.perfect) {
+    comment = perfectComment(rng);
+  }
+  return { summary, comment };
+}

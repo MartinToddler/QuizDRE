@@ -1,0 +1,424 @@
+{
+  "_komentarz": "WERSJA ROBOCZA przygotowana na bazie ogólnej wiedzy o drzwiach — do weryfikacji przez DRE. Po przesłaniu katalogu dodamy pytania o konkretne linie produktowe. Format: patrz materialy/README.md.",
+  "questions": [
+    {
+      "id": "podstawy-01",
+      "category": "podstawy",
+      "question": "Stoisz przed drzwiami, które otwierają się w Twoją stronę (widzisz zawiasy). Zawiasy są po prawej. Jakie to drzwi?",
+      "answers": ["Prawe", "Lewe", "Uniwersalne", "Nie da się określić"],
+      "correctIndex": 0,
+      "explanation": "Zgodnie z polską normą kierunek określa się od strony, na którą drzwi się otwierają: zawiasy po prawej = drzwi prawe.",
+      "difficulty": 1
+    },
+    {
+      "id": "podstawy-02",
+      "category": "podstawy",
+      "question": "Czym różnią się drzwi przylgowe od bezprzylgowych?",
+      "answers": [
+        "Skrzydło przylgowe ma wyfrezowany uskok zachodzący na ościeżnicę",
+        "Drzwi przylgowe nie mają zawiasów",
+        "Drzwi bezprzylgowe są zawsze przesuwne",
+        "Przylga to rodzaj klamki"
+      ],
+      "correctIndex": 0,
+      "explanation": "Przylga to uskok na krawędzi skrzydła, który po zamknięciu zachodzi na ościeżnicę. W drzwiach bezprzylgowych skrzydło licuje się z ościeżnicą w jednej płaszczyźnie.",
+      "difficulty": 1
+    },
+    {
+      "id": "podstawy-03",
+      "category": "podstawy",
+      "question": "Które stwierdzenie o drzwiach bezprzylgowych jest prawdziwe?",
+      "answers": [
+        "Skrzydło tworzy z ościeżnicą jedną płaszczyznę, a zawiasy są zwykle ukryte",
+        "Mają zawsze szerszą ościeżnicę niż przylgowe",
+        "Nie można w nich montować zamka",
+        "Występują wyłącznie jako drzwi zewnętrzne"
+      ],
+      "correctIndex": 0,
+      "explanation": "Bezprzylgowe skrzydło licuje się z ościeżnicą, co daje minimalistyczny wygląd; typowo stosuje się zawiasy ukryte.",
+      "difficulty": 2
+    },
+    {
+      "id": "budowa-01",
+      "category": "budowa",
+      "question": "Skrzydło ramowe (ramiakowe) to konstrukcja, w której:",
+      "answers": [
+        "Rama z drewna lub materiału drewnopochodnego otacza wypełnienie, np. płyciny lub szyby",
+        "Całe skrzydło wykonane jest z jednej płyty MDF",
+        "Skrzydło składa się wyłącznie ze szkła",
+        "Rama jest zawsze aluminiowa"
+      ],
+      "correctIndex": 0,
+      "explanation": "W konstrukcji ramowej nośna rama otacza wypełnienie (płyciny, szyby). Alternatywą jest skrzydło płytowe — jednolita płyta.",
+      "difficulty": 2
+    },
+    {
+      "id": "budowa-02",
+      "category": "budowa",
+      "question": "Wypełnienie „plaster miodu” w skrzydle płytowym to:",
+      "answers": [
+        "Lekki wkład kartonowy o strukturze komórkowej",
+        "Pianka poliuretanowa",
+        "Pełna płyta wiórowa",
+        "Wełna mineralna"
+      ],
+      "correctIndex": 0,
+      "explanation": "Plaster miodu to ekonomiczne, lekkie wypełnienie kartonowe stosowane w drzwiach wewnętrznych.",
+      "difficulty": 1
+    },
+    {
+      "id": "budowa-03",
+      "category": "budowa",
+      "question": "Które wypełnienie skrzydła zapewnia najlepszą izolację akustyczną?",
+      "answers": [
+        "Płyta pełna",
+        "Plaster miodu",
+        "Wkład kratownicowy",
+        "Puste skrzydło"
+      ],
+      "correctIndex": 0,
+      "explanation": "Im większa masa skrzydła, tym lepsze tłumienie dźwięku — płyta pełna wygrywa z wypełnieniami komórkowymi.",
+      "difficulty": 2
+    },
+    {
+      "id": "budowa-04",
+      "category": "budowa",
+      "question": "Płyta wiórowa otworowa w porównaniu z plastrem miodu:",
+      "answers": [
+        "Jest cięższa i lepiej tłumi dźwięki",
+        "Jest lżejsza i tańsza",
+        "Nie nadaje się do drzwi wewnętrznych",
+        "Zawsze wymaga ramy aluminiowej"
+      ],
+      "correctIndex": 0,
+      "explanation": "Płyta otworowa to kompromis: cięższa i cichsza niż plaster miodu, lżejsza niż płyta pełna.",
+      "difficulty": 2
+    },
+    {
+      "id": "okleiny-01",
+      "category": "okleiny",
+      "question": "Okleina CPL to:",
+      "answers": [
+        "Laminat utwardzany w procesie ciągłym, odporny na ścieranie",
+        "Naturalny fornir dębowy",
+        "Cienka folia papierowa",
+        "Lakier nawierzchniowy"
+      ],
+      "correctIndex": 0,
+      "explanation": "CPL (Continuous Pressure Laminate) to laminat o podwyższonej odporności mechanicznej — dobry wybór do intensywnej eksploatacji.",
+      "difficulty": 2
+    },
+    {
+      "id": "okleiny-02",
+      "category": "okleiny",
+      "question": "Fornir naturalny to:",
+      "answers": [
+        "Cienki płat prawdziwego drewna naklejany na skrzydło",
+        "Rodzaj tworzywa sztucznego imitującego drewno",
+        "Farba strukturalna",
+        "Płyta MDF barwiona w masie"
+      ],
+      "correctIndex": 0,
+      "explanation": "Fornir to naturalne drewno — każde skrzydło ma niepowtarzalny rysunek słojów i wymaga nieco większej dbałości.",
+      "difficulty": 1
+    },
+    {
+      "id": "okleiny-03",
+      "category": "okleiny",
+      "question": "Która okleina najlepiej zniesie wilgotne środowisko, np. łazienkę?",
+      "answers": [
+        "Laminat CPL / okleina syntetyczna",
+        "Okleina papierowa",
+        "Surowe drewno bez wykończenia",
+        "Każda znosi wilgoć tak samo"
+      ],
+      "correctIndex": 0,
+      "explanation": "Okleiny syntetyczne (CPL, folie) są odporniejsze na wilgoć niż papierowe czy surowe drewno.",
+      "difficulty": 2
+    },
+    {
+      "id": "okleiny-04",
+      "category": "okleiny",
+      "question": "Główna zaleta okleiny HPL względem cieńszych laminatów to:",
+      "answers": [
+        "Najwyższa odporność na uderzenia i ścieranie",
+        "Niższa cena",
+        "Naturalny zapach drewna",
+        "Mniejsza waga skrzydła"
+      ],
+      "correctIndex": 0,
+      "explanation": "HPL (High Pressure Laminate) jest grubszy i prasowany wysokociśnieniowo — to okleina do zadań specjalnych: hotele, biura, obiekty publiczne.",
+      "difficulty": 3
+    },
+    {
+      "id": "montaz-01",
+      "category": "montaz",
+      "question": "Ościeżnica regulowana wyróżnia się tym, że:",
+      "answers": [
+        "Dopasowuje się do różnych grubości muru",
+        "Można ją montować bez kotew i piany",
+        "Jest zawsze metalowa",
+        "Nie wymaga opasek maskujących"
+      ],
+      "correctIndex": 0,
+      "explanation": "Ościeżnica regulowana ma zakresy regulacji, dzięki którym obejmuje mur o różnej grubości i maskuje krawędzie ściany.",
+      "difficulty": 1
+    },
+    {
+      "id": "montaz-02",
+      "category": "montaz",
+      "question": "Do czego służy listwa opaskowa (opaska) przy ościeżnicy?",
+      "answers": [
+        "Maskuje połączenie ościeżnicy ze ścianą",
+        "Usztywnia skrzydło",
+        "Zastępuje zawiasy",
+        "Jest elementem zamka"
+      ],
+      "correctIndex": 0,
+      "explanation": "Opaska wykańcza styk ościeżnicy z murem — zakrywa szczelinę montażową i pianę.",
+      "difficulty": 1
+    },
+    {
+      "id": "montaz-03",
+      "category": "montaz",
+      "question": "Wymiar „80” w nazwie skrzydła drzwiowego odnosi się do:",
+      "answers": [
+        "Nominalnej szerokości skrzydła ok. 80 cm",
+        "Wysokości skrzydła 80 cm",
+        "Grubości skrzydła 80 mm",
+        "Ciężaru skrzydła 80 kg"
+      ],
+      "correctIndex": 0,
+      "explanation": "Oznaczenie „80” to nominalna szerokość skrzydła (ok. 80 cm); analogicznie „70”, „90” itd.",
+      "difficulty": 1
+    },
+    {
+      "id": "normy-01",
+      "category": "normy",
+      "question": "Minimalna szerokość drzwi wejściowych do mieszkania według polskich przepisów to:",
+      "answers": ["90 cm", "70 cm", "80 cm", "100 cm"],
+      "correctIndex": 0,
+      "explanation": "Warunki techniczne wymagają, by drzwi wejściowe do mieszkania miały w świetle ościeżnicy co najmniej 0,9 m szerokości.",
+      "difficulty": 3
+    },
+    {
+      "id": "normy-02",
+      "category": "normy",
+      "question": "Współczynnik Rw opisuje:",
+      "answers": [
+        "Izolacyjność akustyczną — im wyższy, tym cichiej",
+        "Przenikalność cieplną — im niższy, tym cieplej",
+        "Odporność na włamanie",
+        "Klasę odporności ogniowej"
+      ],
+      "correctIndex": 0,
+      "explanation": "Rw (w decybelach) to wskaźnik izolacyjności akustycznej przegrody; wyższa wartość = lepsze wyciszenie.",
+      "difficulty": 2
+    },
+    {
+      "id": "normy-03",
+      "category": "normy",
+      "question": "Współczynnik U w drzwiach zewnętrznych oznacza:",
+      "answers": [
+        "Przenikanie ciepła — im niższy, tym lepsza izolacja",
+        "Udźwig zawiasów",
+        "Poziom hałasu",
+        "Klasę użytkowania"
+      ],
+      "correctIndex": 0,
+      "explanation": "U [W/(m²·K)] mówi, ile ciepła ucieka przez przegrodę. Do domów energooszczędnych szukamy niskiego U.",
+      "difficulty": 2
+    },
+    {
+      "id": "normy-04",
+      "category": "normy",
+      "question": "Oznaczenie EI30 przy drzwiach technicznych oznacza:",
+      "answers": [
+        "Szczelność i izolacyjność ogniową przez 30 minut",
+        "Trzydziestoletnią gwarancję",
+        "Grubość skrzydła 30 mm",
+        "Odporność na 30 tysięcy cykli otwarć"
+      ],
+      "correctIndex": 0,
+      "explanation": "EI to klasa odporności ogniowej: E — szczelność, I — izolacyjność; liczba to czas w minutach.",
+      "difficulty": 2
+    },
+    {
+      "id": "normy-05",
+      "category": "normy",
+      "question": "Klasa RC2 (dawniej kl. C) przy drzwiach wejściowych informuje o:",
+      "answers": [
+        "Odporności na włamanie",
+        "Odporności na ogień",
+        "Izolacji akustycznej",
+        "Odporności na promieniowanie UV"
+      ],
+      "correctIndex": 0,
+      "explanation": "RC (Resistance Class) to europejska klasyfikacja odporności na włamanie; RC2 to popularny standard drzwi antywłamaniowych do mieszkań.",
+      "difficulty": 2
+    },
+    {
+      "id": "wentylacja-01",
+      "category": "podstawy",
+      "question": "Po co stosuje się podcięcie wentylacyjne w drzwiach łazienkowych?",
+      "answers": [
+        "Zapewnia przepływ powietrza między pomieszczeniami",
+        "Ułatwia otwieranie drzwi",
+        "Zmniejsza wagę skrzydła",
+        "Jest tylko elementem ozdobnym"
+      ],
+      "correctIndex": 0,
+      "explanation": "Podcięcie (lub tuleje/kratka) umożliwia cyrkulację powietrza niezbędną dla prawidłowej wentylacji łazienki.",
+      "difficulty": 1
+    },
+    {
+      "id": "wentylacja-02",
+      "category": "podstawy",
+      "question": "Alternatywą dla podcięcia wentylacyjnego w skrzydle łazienkowym są:",
+      "answers": [
+        "Tuleje wentylacyjne lub kratka nawiewna",
+        "Dodatkowy zamek",
+        "Szyba hartowana",
+        "Samozamykacz"
+      ],
+      "correctIndex": 0,
+      "explanation": "Przepływ powietrza mogą zapewnić także tuleje (otwory z okrągłymi wkładkami) albo kratka w dolnej części skrzydła.",
+      "difficulty": 1
+    },
+    {
+      "id": "akcesoria-01",
+      "category": "akcesoria",
+      "question": "Zamek z blokadą WC charakteryzuje się tym, że:",
+      "answers": [
+        "Zamyka się od środka pokrętłem, a od zewnątrz ma awaryjne otwarcie",
+        "Wymaga klucza z obu stron",
+        "Otwiera się tylko elektronicznie",
+        "Nie ma go w drzwiach łazienkowych"
+      ],
+      "correctIndex": 0,
+      "explanation": "Blokada łazienkowa pozwala zamknąć drzwi od środka bez klucza; od zewnątrz zwykle jest awaryjne otwarcie monetą lub wkrętakiem.",
+      "difficulty": 1
+    },
+    {
+      "id": "akcesoria-02",
+      "category": "akcesoria",
+      "question": "Zawiasy ukryte (niewidoczne po zamknięciu drzwi) to typowa cecha:",
+      "answers": [
+        "Drzwi bezprzylgowych",
+        "Drzwi przesuwnych",
+        "Drzwi harmonijkowych",
+        "Wyłącznie drzwi zewnętrznych"
+      ],
+      "correctIndex": 0,
+      "explanation": "W systemach bezprzylgowych zawiasy chowa się w skrzydle i ościeżnicy, co daje czystą, minimalistyczną linię.",
+      "difficulty": 2
+    },
+    {
+      "id": "akcesoria-03",
+      "category": "akcesoria",
+      "question": "Regulacja zawiasów „3D” pozwala ustawić skrzydło:",
+      "answers": [
+        "W trzech płaszczyznach: góra-dół, lewo-prawo i docisk",
+        "Tylko w pionie",
+        "Tylko docisk do uszczelki",
+        "Wyłącznie fabrycznie"
+      ],
+      "correctIndex": 0,
+      "explanation": "Zawiasy 3D umożliwiają precyzyjne wyregulowanie skrzydła w pionie, poziomie i na docisk.",
+      "difficulty": 2
+    },
+    {
+      "id": "typy-01",
+      "category": "typy",
+      "question": "Główna zaleta drzwi przesuwnych naściennych to:",
+      "answers": [
+        "Oszczędność miejsca — skrzydło nie zajmuje przestrzeni przy otwieraniu",
+        "Najlepsza izolacja akustyczna",
+        "Najwyższa odporność na włamanie",
+        "Brak potrzeby montażu prowadnicy"
+      ],
+      "correctIndex": 0,
+      "explanation": "Skrzydło przesuwa się wzdłuż ściany, więc nie potrzebuje pola otwierania — idealne do małych wnętrz. Kosztem jest słabsza akustyka.",
+      "difficulty": 1
+    },
+    {
+      "id": "typy-02",
+      "category": "typy",
+      "question": "Drzwi kasetonowe (chowane w ścianę) wymagają:",
+      "answers": [
+        "Specjalnej kasety montowanej w ścianie, w którą wsuwa się skrzydło",
+        "Podwójnej ościeżnicy stałej",
+        "Zawiasów wzmocnionych",
+        "Skrzydła o połowę węższego"
+      ],
+      "correctIndex": 0,
+      "explanation": "System kasetonowy chowa skrzydło w ścianie — całkowicie znika ono z widoku po otwarciu.",
+      "difficulty": 2
+    },
+    {
+      "id": "typy-03",
+      "category": "typy",
+      "question": "Muszla drzwiowa zamiast klamki stosowana jest w drzwiach:",
+      "answers": ["Przesuwnych", "Rozwiernych przylgowych", "Zewnętrznych", "Przeciwpożarowych"],
+      "correctIndex": 0,
+      "explanation": "W drzwiach przesuwnych klamka przeszkadzałaby w chowaniu skrzydła — stosuje się wpuszczane uchwyty muszlowe.",
+      "difficulty": 1
+    },
+    {
+      "id": "szyby-01",
+      "category": "budowa",
+      "question": "Szyba hartowana w drzwiach wewnętrznych jest stosowana, ponieważ:",
+      "answers": [
+        "Po stłuczeniu rozpada się na drobne, nieostre kawałki",
+        "Jest lżejsza od zwykłej",
+        "Zawsze lepiej wycisza",
+        "Nie da się jej zarysować"
+      ],
+      "correctIndex": 0,
+      "explanation": "Hartowanie zwiększa wytrzymałość, a przy stłuczeniu szkło rozpada się na drobne kawałki o tępych krawędziach — bezpieczniejsze w domu.",
+      "difficulty": 2
+    },
+    {
+      "id": "szyby-02",
+      "category": "budowa",
+      "question": "Szyba satynowa (mleczna) w skrzydle łazienkowym daje przede wszystkim:",
+      "answers": [
+        "Prywatność przy zachowaniu doświetlenia pomieszczenia",
+        "Lepszą izolację cieplną",
+        "Większą odporność na włamanie",
+        "Ochronę przed hałasem"
+      ],
+      "correctIndex": 0,
+      "explanation": "Mat przepuszcza światło, ale rozmywa obraz — łazienka jest doświetlona bez utraty prywatności.",
+      "difficulty": 1
+    },
+    {
+      "id": "eksploatacja-01",
+      "category": "eksploatacja",
+      "question": "Klasa użytkowania drzwi (np. wg badań cykli otwierania) mówi o:",
+      "answers": [
+        "Trwałości — liczbie cykli otwarcia/zamknięcia, jaką wytrzymuje skrzydło",
+        "Kolorze okleiny",
+        "Sposobie pakowania",
+        "Czasie montażu"
+      ],
+      "correctIndex": 0,
+      "explanation": "Badania trwałości określają, ile cykli pracy wytrzymują skrzydło i okucia — im wyższa klasa, tym bardziej intensywna eksploatacja jest dopuszczalna.",
+      "difficulty": 3
+    },
+    {
+      "id": "eksploatacja-02",
+      "category": "eksploatacja",
+      "question": "Do codziennej pielęgnacji drzwi z okleiną syntetyczną najlepiej używać:",
+      "answers": [
+        "Miękkiej ściereczki i łagodnych środków bez rozpuszczalników",
+        "Druciaka i mleczka ściernego",
+        "Acetonu",
+        "Myjki ciśnieniowej"
+      ],
+      "correctIndex": 0,
+      "explanation": "Środki ścierne i rozpuszczalniki niszczą powierzchnię okleiny — wystarczy wilgotna, miękka ściereczka i delikatny detergent.",
+      "difficulty": 1
+    }
+  ]
+}

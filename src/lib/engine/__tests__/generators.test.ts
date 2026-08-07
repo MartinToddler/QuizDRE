@@ -65,10 +65,10 @@ describe("typ 1: cecha TAK/NIE", () => {
 describe("typ 2: prawe/lewe", () => {
   it("poprawna odpowiedź odpowiada wyświetlanej orientacji", () => {
     const snap = makeSnapshot();
-    const byPath = new Map(
+    const byPath = new Map<string, { m: (typeof snap.models)[number]; mirrored: boolean }>(
       snap.models.flatMap((m) => [
-        [m.photoOriginalPath!, { m, mirrored: false }] as const,
-        [m.photoMirroredPath!, { m, mirrored: true }] as const,
+        [m.photoOriginalPath!, { m, mirrored: false }],
+        [m.photoMirroredPath!, { m, mirrored: true }],
       ]),
     );
     for (let seed = 1; seed <= 20; seed++) {
