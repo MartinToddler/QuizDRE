@@ -79,8 +79,12 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
   const startedRef = useRef(false);
   const autoNextRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const servedRef = useRef<Set<number>>(new Set());
+  // Ref na listę pytań: timeout auto-przejścia w wyzwaniu musi widzieć
+  // partie doklejone PO utworzeniu domknięcia (świeżą długość listy).
   const questionsRef = useRef<QuestionDto[]>([]);
-  questionsRef.current = questions;
+  useEffect(() => {
+    questionsRef.current = questions;
+  }, [questions]);
 
   const finish = useCallback(async (sid: string) => {
     try {
