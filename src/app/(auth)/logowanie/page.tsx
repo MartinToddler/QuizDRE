@@ -1,16 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/db/client";
 
+/** Tłumaczy techniczny opis błędu callbacku na wskazówkę dla użytkownika. */
+function describeCallbackError(opis: string | null): string {
+  const lower = (opis ?? "").toLowerCase();
+  if (lower.includes("code verifier") || lower.includes("both auth code")) {
+    return (
+      "Logowanie zaczęło się pod innym adresem aplikacji, niż ten otwarty teraz. " +
+      "Wejdź przez główny adres (ten sam, który jest w konfiguracji) i spróbuj ponownie."
+    );
+  }
+  return opis
+    ? `Logowanie nie doszło do skutku: ${opis}`
+    : "Logowanie nie doszło do skutku. Spróbuj ponownie.";
+}
+
 export default function LoginPage() {
+  // useSearchParams wymaga granicy Suspense (prerendering Next).
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackError =
+    searchParams.get("blad") === "auth"
+      ? describeCallbackError(searchParams.get("opis"))
+      : null;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +88,12 @@ export default function LoginPage() {
             Codzienny trening wiedzy o drzwiach
           </p>
         </div>
+
+        {callbackError && (
+          <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+            {callbackError}
+          </p>
+        )}
 
         <Button
           type="button"

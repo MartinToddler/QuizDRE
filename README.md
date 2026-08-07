@@ -115,6 +115,7 @@ własnej domeny.
 | „Google hasn’t verified this app” | Consent screen w trybie Testing → **Publish app** albo dodaj konto do Test users |
 | `access_denied` przy logowaniu | Konto spoza listy Test users (tryb Testing) |
 | Po zalogowaniu pętla / powrót na localhost | Site URL / Redirect URLs bez adresu produkcyjnego → uruchom Krok C ponownie, podając URL z Vercela |
+| Powrót na logowanie z `blad=auth` (czerwony banner) | Aplikacja otwarta pod innym adresem niż zarejestrowany — Vercel ma 2 adresy (krótki produkcyjny i długi deploymentowy). Wchodź przez główny adres (Vercel → Settings → Domains) i upewnij się, że dokładnie on jest w Site URL oraz Redirect URLs |
 
 ### 5. Powiadomienia push (opcjonalnie, po deploy'u)
 

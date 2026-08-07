@@ -7,15 +7,27 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
 
-  if (code) {
-    const supabase = await createSupabaseServerClient();
-    if (supabase) {
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (!error) {
-        return NextResponse.redirect(`${origin}${next.startsWith("/") ? next : "/"}`);
-      }
-    }
+  const fail = (description: string | null) => {
+    const url = new URL("/logowanie", origin);
+    url.searchParams.set("blad", "auth");
+    if (description) url.searchParams.set("opis", description.slice(0, 160));
+    return NextResponse.redirect(url);
+  };
+
+  // Supabase może odesłać błąd zamiast kodu (np. odmowa zgody w Google).
+  if (!code) {
+    return fail(
+      searchParams.get("error_description") ?? searchParams.get("error"),
+    );
   }
 
-  return NextResponse.redirect(`${origin}/logowanie?blad=auth`);
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return fail("Brak konfiguracji Supabase (zmienne środowiskowe).");
+
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error) return fail(error.message);
+
+  return NextResponse.redirect(
+    `${origin}${next.startsWith("/") ? next : "/"}`,
+  );
 }
