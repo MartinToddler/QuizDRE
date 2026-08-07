@@ -38,13 +38,8 @@ Odpowiedzi, punktacja i czas liczone są wyłącznie server-side (funkcje SQL
 2. W **SQL Editor** wykonaj po kolei pliki z `supabase/migrations/`
    (0001 → 0005), albo użyj CLI: `supabase db push`.
 3. **Authentication → Providers**: włącz **Email** (na start możesz wyłączyć
-   „Confirm email”) oraz **Google** — wg
-   [instrukcji Supabase](https://supabase.com/docs/guides/auth/social-login/auth-google)
-   (Google Cloud Console → OAuth Client ID, redirect:
-   `https://TWOJ-REF.supabase.co/auth/v1/callback`).
-4. **Authentication → URL Configuration**: ustaw Site URL na adres produkcyjny
-   (np. `https://quizdre.vercel.app`) i dodaj `http://localhost:3000` do
-   Redirect URLs.
+   „Confirm email”). Logowanie **Google** skonfigurujesz w sekcji 4 —
+   większość zrobi za Ciebie skrypt.
 
 ### 2. Aplikacja lokalnie
 
@@ -63,13 +58,63 @@ npx tsx scripts/import/seed-placeholder.ts
 Tworzy 12 modeli z generowanymi zdjęciami (oryginał + lustro), macierz cech
 i importuje pytania teoretyczne z `materialy/teoria/`.
 
-### 4. Deploy na Vercel
+### 4. Logowanie Google + deploy na Vercel (3 kroki)
 
-1. Podepnij repo w [vercel.com](https://vercel.com), framework: Next.js.
-2. Ustaw zmienne środowiskowe jak w `.env.example`
-   (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`).
-3. Po deploy'u zaktualizuj Site URL w Supabase na domenę produkcyjną.
+Ręcznie klikasz tylko tam, gdzie wymagane jest Twoje konto (Google, Vercel) —
+resztę robi skrypt `scripts/setup-google-auth.mjs`.
+
+#### Krok A — Google Cloud Console (~5 min, jednorazowo)
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → wybierz swój
+   projekt (np. „QuizDRE”).
+2. Wyszukaj **„OAuth consent screen”** (w nowym UI: **Google Auth Platform →
+   Branding**): Audience/User type **External**, App name `QuizDRE`, e-maile
+   kontaktowe → zapisz. Następnie w **Audience** kliknij **Publish app**
+   (ostrzeżenie o braku weryfikacji można na razie zignorować) — albo zostań
+   w trybie Testing i dodaj konta graczy do **Test users**.
+3. **Credentials** (nowe UI: **Google Auth Platform → Clients**) →
+   **Create credentials → OAuth client ID**:
+   - Application type: **Web application**, nazwa `QuizDRE Web`;
+   - **Authorized redirect URIs → Add URI** — dokładnie jedna wartość:
+     `https://TWOJ-REF.supabase.co/auth/v1/callback`
+     (`TWOJ-REF` z adresu projektu Supabase, np. `abcdefghijklmnop`);
+   - **Create** → skopiuj **Client ID** i **Client Secret**.
+
+#### Krok B — Vercel (~4 min, jednorazowo)
+
+1. [vercel.com/new](https://vercel.com/new) → zaloguj przez GitHub →
+   **Import** repozytorium `MartinToddler/QuizDRE` (framework wykryje się sam).
+2. W **Environment Variables** wklej wartości z Supabase
+   (Project Settings → API): `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+   (+ później opcjonalnie `NEXT_PUBLIC_VAPID_PUBLIC_KEY`).
+3. **Deploy** → skopiuj adres `https://….vercel.app`. Od teraz każdy push
+   na branch buduje się i wdraża automatycznie.
+
+#### Krok C — automat (cała konfiguracja Supabase + weryfikacja)
+
+```bash
+node scripts/setup-google-auth.mjs
+```
+
+Skrypt zapyta o: ref projektu (odczyta go sam z `.env.local`, jeśli jest),
+token konta `sbp_…`
+([dashboard → Account → Access Tokens](https://supabase.com/dashboard/account/tokens)
+→ „Generate new token”; po wszystkim możesz go unieważnić), Client ID, Client
+Secret i adres z Vercela. Następnie **sam włączy provider Google, ustawi Site
+URL i redirecty oraz zweryfikuje na żywo**, że logowanie wystartuje
+(`WERYFIKACJA: PASS`). Można go uruchamiać wielokrotnie — np. po dodaniu
+własnej domeny.
+
+#### Najczęstsze błędy logowania Google
+
+| Objaw | Przyczyna → naprawa |
+|---|---|
+| Ekran Google: `redirect_uri_mismatch` | W Google Console pole „Authorized redirect URIs” musi zawierać DOKŁADNIE `https://TWOJ-REF.supabase.co/auth/v1/callback` |
+| `Unsupported provider: provider is not enabled` | Provider wyłączony w Supabase → uruchom Krok C |
+| „Google hasn’t verified this app” | Consent screen w trybie Testing → **Publish app** albo dodaj konto do Test users |
+| `access_denied` przy logowaniu | Konto spoza listy Test users (tryb Testing) |
+| Po zalogowaniu pętla / powrót na localhost | Site URL / Redirect URLs bez adresu produkcyjnego → uruchom Krok C ponownie, podając URL z Vercela |
 
 ### 5. Powiadomienia push (opcjonalnie, po deploy'u)
 
