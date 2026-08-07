@@ -49,14 +49,26 @@ cp .env.example .env.local   # uzupełnij klucze z Supabase
 npm run dev
 ```
 
-### 3. Dane przykładowe (żeby od razu grać)
+### 3. Import danych — przycisk w GitHubie (zero instalacji)
 
-```bash
-npx tsx scripts/import/seed-placeholder.ts
-```
+Realne dane (zdjęcia z `materialy/zdjecia/`, pytania z `materialy/teoria/`,
+Excel z `materialy/cechy/`) importuje workflow **Actions → Import danych
+quizu**:
 
-Tworzy 12 modeli z generowanymi zdjęciami (oryginał + lustro), macierz cech
-i importuje pytania teoretyczne z `materialy/teoria/`.
+1. Jednorazowo dodaj sekrety repo (**Settings → Secrets and variables →
+   Actions → New repository secret**):
+   - `SUPABASE_URL` — adres projektu, np. `https://TWOJ-REF.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY` — klucz service_role / Secret (`sb_secret_…`)
+2. Zakładka **Actions** → po lewej „Import danych quizu” → **Run workflow**
+   (możesz zaznaczyć tryb próbny, żeby najpierw zobaczyć sam raport).
+3. Po 2–4 minutach dane są w bazie — odśwież aplikację.
+
+Import jest idempotentny — kolejne uruchomienia nadpisują te same rekordy
+(np. po dodaniu nowych zdjęć do `materialy/zdjecia/`).
+
+Alternatywa lokalna (wymaga Node + `.env.local`): dane przykładowe
+`npx tsx scripts/import/seed-placeholder.ts` albo poszczególne importery
+z `scripts/import/` (wszystkie mają `--dry-run`).
 
 ### 4. Logowanie Google + deploy na Vercel (3 kroki)
 

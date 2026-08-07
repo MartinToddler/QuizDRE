@@ -1,0 +1,89 @@
+# Import danych quizu do Supabase — uruchamiany ręcznie z zakładki Actions.
+#
+# Wymaga dwóch sekretów repozytorium (Settings → Secrets and variables →
+# Actions → New repository secret):
+#   SUPABASE_URL               np. https://wahtinxdjgtzucwhlplm.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY  klucz service_role / Secret key (sb_secret_…)
+#
+# Zdjęcia i pytania czytane są prosto z repozytorium (materialy/…),
+# więc wystarczy kliknąć „Run workflow”.
+
+name: Import danych quizu
+
+on:
+  workflow_dispatch:
+    inputs:
+      zakres:
+        description: "Co zaimportować"
+        type: choice
+        options:
+          - wszystko
+          - zdjecia
+          - teoria
+          - cechy (excel)
+        default: wszystko
+      proba:
+        description: "Tryb próbny (dry-run) — pokaż raport bez zapisu do bazy"
+        type: boolean
+        default: false
+      orientacja:
+        description: "Układ skrzydła na ORYGINALNYCH zdjęciach (right = prawe)"
+        type: choice
+        options:
+          - right
+          - left
+        default: right
+
+concurrency:
+  group: import-danych
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # PHOTO_HASH_SALT celowo nieustawiany — skrypt używa stałej domyślnej,
+      # dzięki czemu ponowne importy nadpisują te same pliki.
+    steps:
+      - name: Sprawdź sekrety
+        run: |
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Brak sekretów SUPABASE_URL i/lub SUPABASE_SERVICE_ROLE_KEY (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Zainstaluj zależności
+        run: npm ci
+
+      - name: "Import zdjęć (modele + wersje lustrzane)"
+        if: inputs.zakres == 'wszystko' || inputs.zakres == 'zdjecia'
+        run: >
+          npx tsx scripts/import/photos.ts
+          --orientation "${{ inputs.orientacja }}"
+          ${{ inputs.proba && '--dry-run' || '' }}
+
+      - name: "Import pytań teoretycznych"
+        if: inputs.zakres == 'wszystko' || inputs.zakres == 'teoria'
+        run: >
+          npx tsx scripts/import/theory.ts
+          ${{ inputs.proba && '--dry-run' || '' }}
+
+      - name: "Import cech z Excela"
+        if: inputs.zakres == 'cechy (excel)'
+        run: >
+          npx tsx scripts/import/features.ts --fuzzy
+          ${{ inputs.proba && '--dry-run' || '' }}
+
+      - name: Podsumowanie
+        if: ${{ !inputs.proba }}
+        run: echo "Import zakończony — odśwież aplikację i wejdź w Quiz."
