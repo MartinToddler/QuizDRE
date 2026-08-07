@@ -68,3 +68,21 @@ export async function signImagePath(
   if (error) return null;
   return data.signedUrl;
 }
+
+/** Zbiorcze signed URLs — jedna runda do Storage zamiast N osobnych. */
+export async function signImagePaths(
+  db: SupabaseClient,
+  paths: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const unique = [...new Set(paths)];
+  if (unique.length === 0) return out;
+  const { data, error } = await db.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrls(unique, SIGNED_URL_TTL_SECONDS);
+  if (error || !data) return out;
+  for (const d of data) {
+    if (d.path && d.signedUrl) out.set(d.path, d.signedUrl);
+  }
+  return out;
+}

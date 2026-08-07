@@ -209,14 +209,17 @@ function genModelGuess(
   if (pool.length === 0) return null;
 
   const target = pick(rng, pool);
+  // Dystraktory: losowe modele SPOZA rodziny celu. Warianty z jednej
+  // kolekcji („ARTE 10" vs „ARTE B 10") są nie do odróżnienia po zdjęciu
+  // i frustrują — ta sama kolekcja wchodzi tylko, gdy brakuje innych.
   const others = snapshot.models.filter((m) => m.name !== target.name);
-  const sameCollection = others.filter(
-    (m) => m.collection !== null && m.collection === target.collection,
+  const otherFamilies = others.filter(
+    (m) => m.collection === null || m.collection !== target.collection,
   );
-  const rest = others.filter((m) => !sameCollection.includes(m));
+  const sameFamily = others.filter((m) => !otherFamilies.includes(m));
 
   const distractorNames: string[] = [];
-  for (const m of [...shuffle(rng, sameCollection), ...shuffle(rng, rest)]) {
+  for (const m of [...shuffle(rng, otherFamilies), ...shuffle(rng, sameFamily)]) {
     if (distractorNames.length === 3) break;
     if (!distractorNames.includes(m.name)) distractorNames.push(m.name);
   }

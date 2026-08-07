@@ -13,14 +13,18 @@ import type { AnswerValue, Category, Mode, QuestionPayload } from "@/lib/engine"
 import { AnswerGrid } from "./answers";
 import { ResultScreen, type SessionSummary } from "./result";
 
-interface ServedQuestionDto {
+interface QuestionDto {
   seq: number;
-  total: number;
   qtype: string;
   payload: QuestionPayload;
   imageUrl: string | null;
+}
+
+interface SessionStartDto {
+  sessionId: string;
   mode: Mode;
-  correctCount: number;
+  total: number;
+  questions: QuestionDto[];
 }
 
 interface AnswerResultDto {
@@ -34,7 +38,7 @@ interface AnswerResultDto {
   sessionStatus: "active" | "finished";
   correctCount: number;
   answeredCount: number;
-  nextQuestion: ServedQuestionDto | null;
+  newQuestions: QuestionDto[];
 }
 
 type Phase =
@@ -65,41 +69,45 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [question, setQuestion] = useState<ServedQuestionDto | null>(null);
+  const [questions, setQuestions] = useState<QuestionDto[]>([]);
+  const [idx, setIdx] = useState(0);
   const [selected, setSelected] = useState<AnswerValue | null>(null);
   const [feedback, setFeedback] = useState<AnswerResultDto | null>(null);
   const [sessionXp, setSessionXp] = useState(0);
+  const [score, setScore] = useState(0); // poprawne z rzędu (wyzwanie)
   const [busy, setBusy] = useState(false);
   const startedRef = useRef(false);
   const autoNextRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const servedRef = useRef<Set<number>>(new Set());
+  const questionsRef = useRef<QuestionDto[]>([]);
+  questionsRef.current = questions;
 
-  const finish = useCallback(
-    async (sid: string) => {
-      try {
-        const res = await api<{ summary: SessionSummary; comment: string | null }>(
-          `/api/quiz/sessions/${sid}/finish`,
-          { method: "POST" },
-        );
-        setPhase({ kind: "summary", summary: res.summary, comment: res.comment });
-      } catch (e) {
-        setPhase({ kind: "error", code: (e as Error).message });
-      }
-    },
-    [],
-  );
+  const finish = useCallback(async (sid: string) => {
+    try {
+      const res = await api<{ summary: SessionSummary; comment: string | null }>(
+        `/api/quiz/sessions/${sid}/finish`,
+        { method: "POST" },
+      );
+      setPhase({ kind: "summary", summary: res.summary, comment: res.comment });
+    } catch (e) {
+      setPhase({ kind: "error", code: (e as Error).message });
+    }
+  }, []);
 
   // Start sesji (raz — ref chroni przed podwójnym efektem w dev).
+  // Serwer zwraca od razu WSZYSTKIE pytania (payloady bez odpowiedzi).
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
     (async () => {
       try {
-        const res = await api<{ sessionId: string; question: ServedQuestionDto }>(
-          "/api/quiz/sessions",
-          { method: "POST", body: JSON.stringify({ mode, category }) },
-        );
+        const res = await api<SessionStartDto>("/api/quiz/sessions", {
+          method: "POST",
+          body: JSON.stringify({ mode, category }),
+        });
         setSessionId(res.sessionId);
-        setQuestion(res.question);
+        setQuestions(res.questions);
+        servedRef.current.add(1); // seq 1 oznaczony już po stronie serwera
         setPhase({ kind: "playing" });
       } catch (e) {
         setPhase({ kind: "error", code: (e as Error).message });
@@ -110,23 +118,58 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
     };
   }, [mode, category]);
 
-  const goNext = useCallback(() => {
-    if (!feedback || !sessionId) return;
-    if (autoNextRef.current) {
-      clearTimeout(autoNextRef.current);
-      autoNextRef.current = null;
+  // Beacon „pytanie wyświetlone” — startuje serwerowy pomiar czasu.
+  const markServed = useCallback(
+    (seq: number) => {
+      if (!sessionId || servedRef.current.has(seq)) return;
+      servedRef.current.add(seq);
+      void fetch(`/api/quiz/sessions/${sessionId}/served`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: seq }),
+        keepalive: true,
+      }).catch(() => {
+        // brak beacona = brak bonusu za szybkość; odpowiedź i tak przejdzie
+      });
+    },
+    [sessionId],
+  );
+
+  // Przy każdym wyświetleniu pytania: beacon + preload obrazków w przód.
+  useEffect(() => {
+    if (phase.kind !== "playing") return;
+    const current = questions[idx];
+    if (current) markServed(current.seq);
+    for (const q of questions.slice(idx, idx + 4)) {
+      if (q.imageUrl) {
+        const img = new Image();
+        img.src = q.imageUrl;
+      }
     }
-    if (feedback.sessionStatus === "finished" || !feedback.nextQuestion) {
-      setPhase({ kind: "loading" });
-      void finish(sessionId);
-      return;
-    }
-    setQuestion(feedback.nextQuestion);
-    setSelected(null);
-    setFeedback(null);
-  }, [feedback, sessionId, finish]);
+  }, [phase.kind, idx, questions, markServed]);
+
+  const advance = useCallback(
+    (res: AnswerResultDto) => {
+      if (autoNextRef.current) {
+        clearTimeout(autoNextRef.current);
+        autoNextRef.current = null;
+      }
+      const hasNext =
+        res.sessionStatus === "active" && idx + 1 < questionsRef.current.length;
+      if (!hasNext) {
+        setPhase({ kind: "loading" });
+        if (sessionId) void finish(sessionId);
+        return;
+      }
+      setIdx((i) => i + 1);
+      setSelected(null);
+      setFeedback(null);
+    },
+    [idx, sessionId, finish],
+  );
 
   async function answer(value: AnswerValue) {
+    const question = questions[idx];
     if (!sessionId || !question || selected || busy) return;
     setSelected(value);
     setBusy(true);
@@ -140,13 +183,16 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
       );
       setFeedback(res);
       setSessionXp((xp) => xp + res.xp);
+      setScore(res.correctCount);
+      if (res.newQuestions.length > 0) {
+        setQuestions((prev) => {
+          const known = new Set(prev.map((q) => q.seq));
+          return [...prev, ...res.newQuestions.filter((q) => !known.has(q.seq))];
+        });
+      }
       // Wyzwanie: poprawna odpowiedź płynie dalej sama.
-      if (mode === "challenge" && res.correct && res.nextQuestion) {
-        autoNextRef.current = setTimeout(() => {
-          setQuestion(res.nextQuestion);
-          setSelected(null);
-          setFeedback(null);
-        }, 1000);
+      if (mode === "challenge" && res.correct) {
+        autoNextRef.current = setTimeout(() => advance(res), 1000);
       }
     } catch (e) {
       const code = (e as Error).message;
@@ -216,9 +262,10 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
     );
   }
 
+  const question = questions[idx];
   if (!question) return null;
-  const answeredCount = feedback?.answeredCount ?? question.seq - 1;
-  const correctCount = feedback?.correctCount ?? question.correctCount;
+  const answeredCount = feedback?.answeredCount ?? idx;
+  const correctCount = feedback?.correctCount ?? score;
 
   return (
     <div className="mx-auto max-w-xl">
@@ -239,7 +286,7 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
           </div>
         ) : (
           <div className="flex-1">
-            <Progress value={answeredCount} max={question.total} />
+            <Progress value={answeredCount} max={questions.length} />
           </div>
         )}
         {feedback && feedback.combo >= 2 && (
@@ -252,7 +299,7 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
 
       {mode !== "challenge" && (
         <p className="mt-2 text-xs font-medium text-gray-400">
-          Pytanie {question.seq} z {question.total}
+          Pytanie {idx + 1} z {questions.length}
         </p>
       )}
 
@@ -311,8 +358,8 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
             )}
           </div>
           {!(mode === "challenge" && feedback.correct) && (
-            <Button onClick={goNext} className="mt-3 w-full" size="md">
-              {feedback.sessionStatus === "finished" || !feedback.nextQuestion
+            <Button onClick={() => advance(feedback)} className="mt-3 w-full" size="md">
+              {feedback.sessionStatus === "finished" || idx + 1 >= questions.length
                 ? "Zobacz wynik"
                 : "Dalej"}
             </Button>

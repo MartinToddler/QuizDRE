@@ -115,9 +115,9 @@ describe("typ 3: jaki to model", () => {
     expect(snap.models.some((m) => m.name === targetName)).toBe(true);
   });
 
-  it("dystraktory preferują tę samą kolekcję", () => {
+  it("dystraktory pochodzą spoza rodziny celu (feedback DRE)", () => {
     const snap = makeSnapshot();
-    // Każda kolekcja ma 4 modele → zawsze 3 dystraktory z tej samej kolekcji.
+    // 3 kolekcje × 4 modele → zawsze 8 modeli z innych rodzin do wyboru.
     for (let seed = 1; seed <= 15; seed++) {
       const q = generateQuestion(
         "model_guess",
@@ -127,10 +127,11 @@ describe("typ 3: jaki to model", () => {
       )!;
       const idx = "index" in q.correctAnswer ? q.correctAnswer.index : -1;
       const target = snap.models.find((m) => m.name === q.payload.options[idx])!;
-      const collections = q.payload.options.map(
-        (name) => snap.models.find((m) => m.name === name)!.collection,
-      );
-      expect(collections.every((c) => c === target.collection)).toBe(true);
+      const distractors = q.payload.options.filter((_, i) => i !== idx);
+      for (const name of distractors) {
+        const m = snap.models.find((x) => x.name === name)!;
+        expect(m.collection).not.toBe(target.collection);
+      }
     }
   });
 

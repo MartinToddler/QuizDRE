@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadCatalogSnapshot, signImagePath } from "@/lib/db/catalog";
+import { loadCatalogSnapshot, signImagePath, signImagePaths } from "@/lib/db/catalog";
 import { createAdminClient } from "@/lib/db/server";
 import {
   challengeOverComment,
@@ -69,6 +69,25 @@ export interface ServedQuestion {
   imageUrl: string | null;
   mode: Mode;
   correctCount: number;
+}
+
+/**
+ * Lekki DTO pytania do prefetchu — payload nigdy nie zawiera odpowiedzi,
+ * więc klient może dostać CAŁĄ listę z góry i przechodzić między pytaniami
+ * bez czekania na serwer. served_at ustawia beacon przy wyświetleniu.
+ */
+export interface QuestionDto {
+  seq: number;
+  qtype: string;
+  payload: QuestionPayload;
+  imageUrl: string | null;
+}
+
+export interface SessionStart {
+  sessionId: string;
+  mode: Mode;
+  total: number;
+  questions: QuestionDto[];
 }
 
 interface SessionRow {
@@ -166,6 +185,48 @@ async function serve(
   };
 }
 
+/** Wszystkie nieodpowiedziane pytania od fromSeq — payloady + zbiorczo podpisane URL-e. */
+async function serveBatch(
+  db: SupabaseClient,
+  sessionId: string,
+  fromSeq: number,
+): Promise<QuestionDto[]> {
+  const { data, error } = await db
+    .from("session_questions")
+    .select("seq, qtype, payload, image_path")
+    .eq("session_id", sessionId)
+    .gte("seq", fromSeq)
+    .is("answered_at", null)
+    .order("seq");
+  if (error) throw mapDbError(error.message);
+  const rows = data ?? [];
+  const signed = await signImagePaths(
+    db,
+    rows.map((r) => r.image_path).filter((p): p is string => Boolean(p)),
+  );
+  return rows.map((r) => ({
+    seq: r.seq,
+    qtype: r.qtype,
+    payload: r.payload as QuestionPayload,
+    imageUrl: r.image_path ? (signed.get(r.image_path) ?? null) : null,
+  }));
+}
+
+/** Beacon „pytanie wyświetlone” — startuje serwerowy pomiar czasu odpowiedzi. */
+export async function markServed(
+  userId: string,
+  sessionId: string,
+  seq: number,
+): Promise<void> {
+  const db = admin();
+  const { error } = await db.rpc("mark_question_served", {
+    p_user_id: userId,
+    p_session_id: sessionId,
+    p_seq: seq,
+  });
+  if (error) throw mapDbError(error.message);
+}
+
 /* ------------------------------------------------------------------ */
 /* Start sesji                                                         */
 /* ------------------------------------------------------------------ */
@@ -174,7 +235,7 @@ export async function startSession(
   userId: string,
   mode: Mode,
   category?: Category,
-): Promise<{ sessionId: string; question: ServedQuestion }> {
+): Promise<SessionStart> {
   const db = admin();
 
   if (mode === "daily") return startDailySession(db, userId);
@@ -202,14 +263,31 @@ export async function startSession(
   });
   if (error) throw mapDbError(error.message);
 
-  const session = await getOwnedSession(db, userId, sessionId as string);
-  return { sessionId: session.id, question: await serve(db, userId, session, 1) };
+  return finalizeStart(db, userId, sessionId as string, mode);
+}
+
+/** Wspólne zakończenie startu: pełna lista pytań + pierwsze oznaczone jako wyświetlone. */
+async function finalizeStart(
+  db: SupabaseClient,
+  userId: string,
+  sessionId: string,
+  mode: Mode,
+): Promise<SessionStart> {
+  const [served] = await Promise.all([
+    serveBatch(db, sessionId, 1),
+    db.rpc("mark_question_served", {
+      p_user_id: userId,
+      p_session_id: sessionId,
+      p_seq: 1,
+    }),
+  ]);
+  return { sessionId, mode, total: served.length, questions: served };
 }
 
 async function startDailySession(
   db: SupabaseClient,
   userId: string,
-): Promise<{ sessionId: string; question: ServedQuestion }> {
+): Promise<SessionStart> {
   const today = warsawToday();
 
   let { data: daily } = await db
@@ -257,8 +335,7 @@ async function startDailySession(
   });
   if (error) throw mapDbError(error.message);
 
-  const session = await getOwnedSession(db, userId, sessionId as string);
-  return { sessionId: session.id, question: await serve(db, userId, session, 1) };
+  return finalizeStart(db, userId, sessionId as string, "daily");
 }
 
 /* ------------------------------------------------------------------ */
@@ -291,7 +368,8 @@ export interface AnswerResult {
   sessionStatus: "active" | "finished";
   correctCount: number;
   answeredCount: number;
-  nextQuestion: ServedQuestion | null;
+  /** Dogenerowana partia wyzwania — klient dokleja do lokalnej listy. */
+  newQuestions: QuestionDto[];
 }
 
 export async function submitAnswer(
@@ -323,14 +401,17 @@ export async function submitAnswer(
     answeredCount: number;
   };
 
-  // Kontekst narratora: seria błędów / comeback z ostatnich odpowiedzi.
-  const { data: lastAnswers } = await db
-    .from("session_questions")
-    .select("is_correct")
-    .eq("session_id", sessionId)
-    .not("answered_at", "is", null)
-    .order("seq", { ascending: false })
-    .limit(4);
+  // Kontekst narratora + stan sesji — równolegle (mniej czekania na feedback).
+  const [{ data: lastAnswers }, session] = await Promise.all([
+    db
+      .from("session_questions")
+      .select("is_correct")
+      .eq("session_id", sessionId)
+      .not("answered_at", "is", null)
+      .order("seq", { ascending: false })
+      .limit(4),
+    getOwnedSession(db, userId, sessionId),
+  ]);
   const previous = (lastAnswers ?? []).slice(1).map((r) => r.is_correct);
   let wrongStreak = 0;
   if (!res.correct) {
@@ -351,21 +432,15 @@ export async function submitAnswer(
     comeback,
   });
 
-  const session = await getOwnedSession(db, userId, sessionId);
-
-  // Wyzwanie: dogeneruj partię, gdy kończą się pytania.
+  // Wyzwanie: dogeneruj partię, gdy kończą się pytania; klient dostaje
+  // nowe payloady w tej samej odpowiedzi i dokleja je lokalnie.
+  let newQuestions: QuestionDto[] = [];
   if (session.status === "active" && session.mode === "challenge") {
     const answered = session.correct_count + session.wrong_count;
     if (session.question_count - answered < 3) {
+      const prevCount = session.question_count;
       await extendChallenge(db, userId, session);
-    }
-  }
-
-  let nextQuestion: ServedQuestion | null = null;
-  if (session.status === "active") {
-    const fresh = await getOwnedSession(db, userId, sessionId);
-    if (seq + 1 <= fresh.question_count) {
-      nextQuestion = await serve(db, userId, fresh, seq + 1);
+      newQuestions = await serveBatch(db, sessionId, prevCount + 1);
     }
   }
 
@@ -380,7 +455,7 @@ export async function submitAnswer(
     sessionStatus: res.sessionStatus,
     correctCount: res.correctCount,
     answeredCount: res.answeredCount,
-    nextQuestion,
+    newQuestions,
   };
 }
 

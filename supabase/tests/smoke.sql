@@ -126,6 +126,34 @@ begin
 end $$;
 
 -- ------------------------------------------------------------------
+-- 3b. Prefetch (0006): odpowiedź BEZ beacona served — bez bonusu i bez kary
+-- ------------------------------------------------------------------
+do $$
+declare
+  v_uid uuid := current_setting('test.uid')::uuid;
+  v_sid uuid;
+  v_res jsonb;
+begin
+  v_sid := public.create_session(
+    v_uid, 'learning', 'mix', null,
+    '[
+      {"seq":1,"qtype":"theory","dedupeKey":"pf1","payload":{"q":1},"correctAnswer":{"index":0},"explanation":null,"imagePath":null},
+      {"seq":2,"qtype":"theory","dedupeKey":"pf2","payload":{"q":2},"correctAnswer":{"index":1},"explanation":null,"imagePath":null}
+    ]'::jsonb
+  );
+
+  -- served_at nie ustawione (beacon nie zdążył) → odpowiedź przechodzi,
+  -- czas nieznany: zero bonusu za szybkość i zero kary too_fast.
+  v_res := public.submit_answer(v_uid, v_sid, 1, '{"index":0}'::jsonb);
+  assert (v_res->>'correct')::boolean, 'prefetch: odpowiedź miała być poprawna';
+  assert (v_res->>'xp')::int = 10, format('prefetch: xp=10 bez bonusu, było %s', v_res->>'xp');
+  assert (v_res->>'timeMs')::int = 0, 'prefetch: brak pomiaru czasu';
+  assert (select time_ms from public.session_questions
+           where session_id = v_sid and seq = 1) is null,
+         'prefetch: time_ms w bazie ma być NULL';
+end $$;
+
+-- ------------------------------------------------------------------
 -- 4. finish_session: bonusy, streak, odznaki, idempotencja
 -- ------------------------------------------------------------------
 do $$
