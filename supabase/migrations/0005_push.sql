@@ -20,6 +20,9 @@ create policy "push: odczyt własnych"
   on public.push_subscriptions for select to authenticated using (user_id = auth.uid());
 create policy "push: dodawanie własnych"
   on public.push_subscriptions for insert to authenticated with check (user_id = auth.uid());
+create policy "push: aktualizacja własnych"
+  on public.push_subscriptions for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "push: usuwanie własnych"
   on public.push_subscriptions for delete to authenticated using (user_id = auth.uid());
 

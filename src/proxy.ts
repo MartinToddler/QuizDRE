@@ -4,7 +4,7 @@ import { supabasePublicConfig } from "@/lib/env";
 
 const PUBLIC_PATHS = ["/logowanie", "/rejestracja", "/auth"];
 
-export async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   const config = supabasePublicConfig();
   if (!config) return NextResponse.next(); // brak konfiguracji → strona setup
 

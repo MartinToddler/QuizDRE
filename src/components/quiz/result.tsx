@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
+import { PushOptInCard } from "@/components/push-opt-in";
 import { RANKS } from "@/lib/engine";
 import { ConfettiBurst } from "./confetti";
 
@@ -151,6 +152,8 @@ export function ResultScreen({
           <Chip tone="green">+{m.reward} XP</Chip>
         </Card>
       ))}
+
+      <PushOptInCard />
 
       <div className="grid grid-cols-2 gap-3 pt-2">
         <Link href={playAgainHref}>
