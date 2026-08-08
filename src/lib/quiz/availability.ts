@@ -9,7 +9,10 @@ import {
   type Category,
 } from "@/lib/engine";
 
-/** Kategorie z wystarczającą pulą pytań (mniejsze są ukrywane w UI). */
+/**
+ * Kategorie z wystarczającą pulą pytań (mniejsze są ukrywane w UI).
+ * Bez „mix” — picker trybu nauki realizuje go zaznaczeniem wszystkich.
+ */
 export async function availableCategories(): Promise<Category[]> {
   const db = createAdminClient();
   if (!db) return [];
@@ -18,15 +21,13 @@ export async function availableCategories(): Promise<Category[]> {
     const types = new Set(availableTypes(snapshot));
     // technical/dekory dzielą typ feature_yn — bramkujemy je pulą rodzaju.
     const kinds = featureKindAvailability(snapshot);
-    const cats = (
+    return (
       Object.keys(CATEGORY_TO_QTYPE) as Exclude<Category, "mix">[]
     ).filter((c) => {
       if (c === "technical") return kinds.technical >= MIN_POOL_FOR_TYPE;
       if (c === "dekory") return kinds.dekor >= MIN_POOL_FOR_TYPE;
       return types.has(CATEGORY_TO_QTYPE[c]);
     });
-    if (cats.length > 0) cats.push("mix" as never);
-    return cats;
   } catch {
     return [];
   }

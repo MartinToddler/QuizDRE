@@ -8,7 +8,7 @@ const NAV: { key: NavKey; href: string; label: string; icon: string }[] = [
   { key: "home", href: "/", label: "Start", icon: "🏠" },
   { key: "quiz", href: "/quiz", label: "Graj", icon: "▶️" },
   { key: "ranking", href: "/ranking", label: "Rankingi", icon: "🏆" },
-  { key: "profil", href: "/profil", label: "Profil", icon: "👤" },
+  { key: "profil", href: "/profil", label: "Statystyki", icon: "📊" },
 ];
 
 /** Layout aplikacji: górny pasek + dolna nawigacja mobilna. */

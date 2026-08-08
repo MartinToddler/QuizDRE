@@ -25,6 +25,10 @@ interface SessionStartDto {
   sessionId: string;
   mode: Mode;
   total: number;
+  answered: number;
+  correct: number;
+  xpEarned: number;
+  resumed: boolean;
   questions: QuestionDto[];
 }
 
@@ -66,7 +70,13 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function QuizGame({ mode, category }: { mode: Mode; category?: Category }) {
+export function QuizGame({
+  mode,
+  categories,
+}: {
+  mode: Mode;
+  categories?: Category[];
+}) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -76,6 +86,9 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
   const [feedback, setFeedback] = useState<AnswerResultDto | null>(null);
   const [sessionXp, setSessionXp] = useState(0);
   const [score, setScore] = useState(0); // poprawne z rzędu (wyzwanie)
+  const [total, setTotal] = useState(0); // pełna długość sesji (nauka)
+  const [answeredBase, setAnsweredBase] = useState(0); // odpowiedziane przed wznowieniem
+  const [resumed, setResumed] = useState(false);
   const [busy, setBusy] = useState(false);
   const startedRef = useRef(false);
   const autoNextRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -108,11 +121,17 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
       try {
         const res = await api<SessionStartDto>("/api/quiz/sessions", {
           method: "POST",
-          body: JSON.stringify({ mode, category }),
+          body: JSON.stringify({ mode, categories }),
         });
         setSessionId(res.sessionId);
         setQuestions(res.questions);
-        servedRef.current.add(1); // seq 1 oznaczony już po stronie serwera
+        setTotal(res.total);
+        setAnsweredBase(res.answered);
+        setScore(res.correct);
+        setSessionXp(res.xpEarned);
+        setResumed(res.resumed);
+        // pierwsze z serwowanych pytań jest już oznaczone po stronie serwera
+        if (res.questions[0]) servedRef.current.add(res.questions[0].seq);
         setPhase({ kind: "playing" });
       } catch (e) {
         setPhase({ kind: "error", code: (e as Error).message });
@@ -121,7 +140,7 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
     return () => {
       if (autoNextRef.current) clearTimeout(autoNextRef.current);
     };
-  }, [mode, category]);
+  }, [mode, categories]);
 
   // Beacon „pytanie wyświetlone” — startuje serwerowy pomiar czasu.
   const markServed = useCallback(
@@ -154,6 +173,14 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
       }
     }
   }, [phase.kind, idx, questions, markServed]);
+
+  // Feedback pojawia się pod odpowiedziami — na telefonie dociągamy go w kadr.
+  const feedbackRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (feedback) {
+      feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [feedback]);
 
   const advance = useCallback(
     (res: AnswerResultDto) => {
@@ -258,7 +285,7 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
   if (phase.kind === "summary") {
     const againHref =
       mode === "learning"
-        ? `/quiz/gra?mode=learning&category=${category ?? "mix"}`
+        ? `/quiz/gra?mode=learning&categories=${(categories ?? ["mix"]).join(",")}`
         : mode === "challenge"
           ? "/quiz/gra?mode=challenge"
           : "/";
@@ -273,7 +300,7 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
 
   const question = questions[idx];
   if (!question) return null;
-  const answeredCount = feedback?.answeredCount ?? idx;
+  const answeredCount = feedback?.answeredCount ?? answeredBase + idx;
   const correctCount = feedback?.correctCount ?? score;
 
   return (
@@ -295,7 +322,7 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
           </div>
         ) : (
           <div className="flex-1">
-            <Progress value={answeredCount} max={questions.length} />
+            <Progress value={answeredCount} max={total || questions.length} />
           </div>
         )}
         {feedback && feedback.combo >= 2 && (
@@ -308,7 +335,13 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
 
       {mode !== "challenge" && (
         <p className="mt-2 text-xs font-medium text-gray-400">
-          Pytanie {idx + 1} z {questions.length}
+          Pytanie {answeredBase + idx + 1} z {total || questions.length}
+        </p>
+      )}
+
+      {resumed && idx === 0 && !feedback && (
+        <p className="mt-2 inline-block rounded-lg bg-dre-50 px-3 py-1.5 text-xs font-medium text-dre-700">
+          ↻ Wznowiono przerwaną sesję — gramy od miejsca, w którym stanęło.
         </p>
       )}
 
@@ -359,6 +392,7 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
       {/* feedback */}
       {feedback && (
         <Card
+          ref={feedbackRef}
           className={cn(
             "mt-4 animate-rise border-2",
             feedback.correct ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50",

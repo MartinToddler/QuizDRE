@@ -93,7 +93,14 @@ export interface QuestionDto {
 export interface SessionStart {
   sessionId: string;
   mode: Mode;
+  /** Pełna liczba pytań sesji (przy wznowieniu większa niż questions.length). */
   total: number;
+  /** Dotychczas odpowiedziane / poprawne / zdobyte XP (0 przy świeżej sesji). */
+  answered: number;
+  correct: number;
+  xpEarned: number;
+  /** true = wznowiona aktywna sesja (np. po odświeżeniu strony). */
+  resumed: boolean;
   questions: QuestionDto[];
 }
 
@@ -275,11 +282,24 @@ export async function markServed(
 export async function startSession(
   userId: string,
   mode: Mode,
-  category?: Category,
+  categories?: Category[],
 ): Promise<SessionStart> {
   const db = admin();
 
   if (mode === "daily") return startDailySession(db, userId);
+
+  // Aktywna sesja w tym samym trybie → wznowienie zamiast kasowania
+  // postępu (odświeżenie strony / przypadkowe wyjście z gry).
+  const { data: active } = await db
+    .from("quiz_sessions")
+    .select("id, mode, question_count, correct_count, wrong_count, xp_earned")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (active && active.mode === mode) {
+    const resumed = await resumeSession(db, userId, active);
+    if (resumed) return resumed;
+  }
 
   const [snapshot, recent] = await Promise.all([
     loadCatalogSnapshot(db),
@@ -288,9 +308,10 @@ export async function startSession(
   const state = newGenState({ recentTheoryIds: recent });
   const rng = randomRng();
 
+  const picked = categories?.length ? categories : (["mix"] as Category[]);
   const questions =
     mode === "learning"
-      ? composeLearningSession(snapshot, category ?? "mix", state, rng)
+      ? composeLearningSession(snapshot, picked, state, rng)
       : composeChallengeBatch(snapshot, state, rng);
 
   if (questions.length === 0) throw new QuizError("no_questions", 503);
@@ -298,7 +319,12 @@ export async function startSession(
   const { data: sessionId, error } = await db.rpc("create_session", {
     p_user_id: userId,
     p_mode: mode,
-    p_category: mode === "learning" ? (category ?? "mix") : null,
+    p_category:
+      mode === "learning"
+        ? picked.length === 1
+          ? picked[0]
+          : "mix"
+        : null,
     p_daily_quiz_id: null,
     p_questions: toDbRows(questions, 1),
   });
@@ -322,7 +348,56 @@ async function finalizeStart(
       p_seq: 1,
     }),
   ]);
-  return { sessionId, mode, total: served.length, questions: served };
+  return {
+    sessionId,
+    mode,
+    total: served.length,
+    answered: 0,
+    correct: 0,
+    xpEarned: 0,
+    resumed: false,
+    questions: served,
+  };
+}
+
+interface ActiveSessionRow {
+  id: string;
+  mode: Mode;
+  question_count: number;
+  correct_count: number;
+  wrong_count: number;
+  xp_earned: number;
+}
+
+/**
+ * Wznowienie aktywnej sesji: nieodpowiedziane pytania + liczniki postępu.
+ * null, gdy nie ma czego wznawiać (wszystko odpowiedziane) — wtedy
+ * create_session domknie starą sesję jak dotąd.
+ */
+async function resumeSession(
+  db: SupabaseClient,
+  userId: string,
+  session: ActiveSessionRow,
+): Promise<SessionStart | null> {
+  const questions = await serveBatch(db, session.id, 1);
+  if (questions.length === 0) return null;
+
+  await db.rpc("mark_question_served", {
+    p_user_id: userId,
+    p_session_id: session.id,
+    p_seq: questions[0].seq,
+  });
+
+  return {
+    sessionId: session.id,
+    mode: session.mode,
+    total: session.question_count,
+    answered: session.correct_count + session.wrong_count,
+    correct: session.correct_count,
+    xpEarned: session.xp_earned,
+    resumed: true,
+    questions,
+  };
 }
 
 async function startDailySession(
@@ -360,11 +435,18 @@ async function startDailySession(
 
   const { data: existing } = await db
     .from("quiz_sessions")
-    .select("id")
+    .select("id, mode, status, question_count, correct_count, wrong_count, xp_earned")
     .eq("user_id", userId)
     .eq("daily_quiz_id", daily.id)
     .maybeSingle();
-  if (existing) throw new QuizError("daily_already_played", 409);
+  if (existing) {
+    // Odświeżenie w trakcie Quizu Dnia nie może blokować podejścia.
+    if (existing.status === "active") {
+      const resumed = await resumeSession(db, userId, existing);
+      if (resumed) return resumed;
+    }
+    throw new QuizError("daily_already_played", 409);
+  }
 
   const questions = daily.questions as GeneratedQuestion[];
   const { data: sessionId, error } = await db.rpc("create_session", {

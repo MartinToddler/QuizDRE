@@ -44,7 +44,7 @@ describe("typ 1: cecha TAK/NIE", () => {
     for (let seed = 1; seed <= 50; seed++) {
       const rng = mulberry32(seed);
       const state = newGenState();
-      const session = composeLearningSession(snap, "technical", state, rng);
+      const session = composeLearningSession(snap, ["technical"], state, rng);
       for (const q of session) {
         total += 1;
         if ("value" in q.correctAnswer && q.correctAnswer.value === "TAK") yes += 1;
@@ -60,7 +60,7 @@ describe("typ 1: cecha TAK/NIE", () => {
     const snap = makeSnapshot();
     const session = composeLearningSession(
       snap,
-      "technical",
+      ["technical"],
       newGenState(),
       mulberry32(7),
     );
@@ -84,7 +84,7 @@ describe("podział technika / dekory", () => {
 
   it("kategoria „technical” pyta wyłącznie o cechy techniczne", () => {
     const snap = makeSnapshot();
-    const session = composeLearningSession(snap, "technical", newGenState(), mulberry32(13));
+    const session = composeLearningSession(snap, ["technical"], newGenState(), mulberry32(13));
     expect(session).toHaveLength(20);
     for (const q of session) {
       expect(TECH_IDS.has(featId(q.dedupeKey))).toBe(true);
@@ -96,7 +96,7 @@ describe("podział technika / dekory", () => {
     const snap = makeSnapshot();
     const modelById = new Map(snap.models.map((m) => [m.id, m]));
     const featureById = new Map(snap.features.map((f) => [f.id, f]));
-    const session = composeLearningSession(snap, "dekory", newGenState(), mulberry32(14));
+    const session = composeLearningSession(snap, ["dekory"], newGenState(), mulberry32(14));
     expect(session).toHaveLength(20);
     for (const q of session) {
       const [, modelId, fid] = q.dedupeKey.split(":");
@@ -263,16 +263,55 @@ describe("typ 4: teoria", () => {
 describe("kompozycja sesji", () => {
   it("nauka mix daje 20 pytań bez powtórek", () => {
     const snap = makeSnapshot();
-    const session = composeLearningSession(snap, "mix", newGenState(), mulberry32(4));
+    const session = composeLearningSession(snap, ["mix"], newGenState(), mulberry32(4));
     expect(session).toHaveLength(20);
     expect(new Set(session.map((q) => q.dedupeKey)).size).toBe(20);
+  });
+
+  it("pusta lista kategorii = wszystkie (jak mix)", () => {
+    const snap = makeSnapshot();
+    const session = composeLearningSession(snap, [], newGenState(), mulberry32(21));
+    expect(session).toHaveLength(20);
+    expect(new Set(session.map((q) => q.qtype)).size).toBeGreaterThan(1);
+  });
+
+  it("wybór kilku kategorii ogranicza pytania do nich", () => {
+    const snap = makeSnapshot();
+    for (let seed = 1; seed <= 10; seed++) {
+      const session = composeLearningSession(
+        snap,
+        ["models", "theory"],
+        newGenState(),
+        mulberry32(seed),
+      );
+      expect(session).toHaveLength(20);
+      const types = new Set(session.map((q) => q.qtype));
+      expect([...types].sort()).toEqual(["model_guess", "theory"]);
+    }
+  });
+
+  it("technical + dekory: tylko feature_yn, oba rodzaje obecne", () => {
+    const snap = makeSnapshot();
+    const session = composeLearningSession(
+      snap,
+      ["technical", "dekory"],
+      newGenState(),
+      mulberry32(17),
+    );
+    expect(session).toHaveLength(20);
+    expect(session.every((q) => q.qtype === "feature_yn")).toBe(true);
+    const techIds = new Set(["feat-1", "feat-2", "feat-3", "feat-4", "feat-5"]);
+    const kinds = new Set(
+      session.map((q) => (techIds.has(q.dedupeKey.split(":")[2]) ? "t" : "d")),
+    );
+    expect(kinds.size).toBe(2);
   });
 
   it("nauka w kategorii z małą pulą zwraca tyle, ile się da", () => {
     const snap = makeSnapshot();
     const session = composeLearningSession(
       snap,
-      "left_right",
+      ["left_right"],
       newGenState(),
       mulberry32(6),
     );

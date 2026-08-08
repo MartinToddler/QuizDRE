@@ -410,37 +410,75 @@ function categoryOptions(category: Category): GenerateOptions | undefined {
   return undefined;
 }
 
-/** Sesja trybu nauki: 20 pytań z kategorii (lub mniej, gdy pula mniejsza). */
+interface LearningUnit {
+  qtype: QType;
+  opts: GenerateOptions | undefined;
+  available: number;
+}
+
+/**
+ * Sesja trybu nauki: 20 pytań z WYBRANYCH kategorii (jedna, kilka lub
+ * wszystkie), rozdzielonych po równo i przetasowanych. Pusta lista albo
+ * „mix” = wszystkie kategorie. Mniejsze pule → mniej pytań.
+ */
 export function composeLearningSession(
   snapshot: CatalogSnapshot,
-  category: Category,
+  categories: readonly Category[],
   state: GenState,
   rng: Rng,
 ): GeneratedQuestion[] {
-  if (category !== "mix") {
-    const qtype = CATEGORY_TO_QTYPE[category];
-    const opts = categoryOptions(category);
-    const available = opts?.featureKind
-      ? featureKindAvailability(snapshot)[opts.featureKind]
-      : typeAvailability(snapshot)[qtype];
-    const wanted = Math.min(LEARNING_SESSION_SIZE, available);
-    const out: GeneratedQuestion[] = [];
-    while (out.length < wanted) {
-      const q = generateQuestion(qtype, snapshot, state, rng, opts);
-      if (!q) break;
-      out.push(q);
-    }
-    return out;
-  }
+  const all = Object.keys(CATEGORY_TO_QTYPE) as Exclude<Category, "mix">[];
+  const picked =
+    categories.length === 0 || categories.includes("mix")
+      ? all
+      : all.filter((c) => categories.includes(c));
 
-  const types = availableTypes(snapshot);
-  if (types.length === 0) return [];
-  const perType = Math.ceil(LEARNING_SESSION_SIZE / types.length);
-  const plan: QType[] = shuffle(
+  const kinds = featureKindAvailability(snapshot);
+  const types = typeAvailability(snapshot);
+  const units: LearningUnit[] = picked
+    .map((c) => ({
+      qtype: CATEGORY_TO_QTYPE[c],
+      opts: categoryOptions(c),
+      available:
+        c === "technical"
+          ? kinds.technical
+          : c === "dekory"
+            ? kinds.dekor
+            : types[CATEGORY_TO_QTYPE[c]],
+    }))
+    .filter((u) => u.available > 0);
+  if (units.length === 0) return [];
+
+  const wanted = Math.min(
+    LEARNING_SESSION_SIZE,
+    units.reduce((n, u) => n + u.available, 0),
+  );
+
+  const perUnit = Math.ceil(wanted / units.length);
+  const plan = shuffle(
     rng,
-    types.flatMap((t) => Array<QType>(perType).fill(t)),
-  ).slice(0, LEARNING_SESSION_SIZE);
-  return generateOfTypes(plan, snapshot, state, rng);
+    units.flatMap((u) => Array<LearningUnit>(perUnit).fill(u)),
+  ).slice(0, wanted);
+
+  const out: GeneratedQuestion[] = [];
+  for (const u of plan) {
+    const q = generateQuestion(u.qtype, snapshot, state, rng, u.opts);
+    if (q) out.push(q);
+  }
+  // Dopełnienie round-robin — plan mógł trafić w wyczerpane pule.
+  let stalled = false;
+  while (out.length < wanted && !stalled) {
+    stalled = true;
+    for (const u of units) {
+      if (out.length >= wanted) break;
+      const q = generateQuestion(u.qtype, snapshot, state, rng, u.opts);
+      if (q) {
+        out.push(q);
+        stalled = false;
+      }
+    }
+  }
+  return out;
 }
 
 /**

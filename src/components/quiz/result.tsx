@@ -161,12 +161,14 @@ export function ResultScreen({
         </Link>
         <Link href="/ranking">
           <Button variant="secondary" className="w-full">
-            Rankingi
+            🏆 Rankingi
           </Button>
         </Link>
       </div>
-      <Link href="/" className="block text-center text-sm text-gray-500 hover:underline">
-        Wróć na start
+      <Link href="/" className="block">
+        <Button variant="outline" className="w-full">
+          🏠 Wróć na start
+        </Button>
       </Link>
     </div>
   );

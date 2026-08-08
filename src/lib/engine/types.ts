@@ -136,7 +136,10 @@ export interface CatalogSnapshot {
 
 export const startSessionSchema = z.object({
   mode: z.enum(MODES),
+  /** Pojedyncza kategoria — stare linki/klienty. */
   category: z.enum(CATEGORIES).optional(),
+  /** Wybór wielu kategorii nauki (pusta lista lub „mix” = wszystkie). */
+  categories: z.array(z.enum(CATEGORIES)).max(8).optional(),
 });
 
 export const submitAnswerSchema = z.object({

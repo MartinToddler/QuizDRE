@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { CATEGORY_INFO, QTYPE_INFO } from "@/components/quiz/categories";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/cn";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { rankForXp } from "@/lib/engine";
+import { rankForXp, type Category } from "@/lib/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,9 @@ const MODE_LABEL: Record<string, string> = {
   challenge: "Wyzwanie",
   daily: "Quiz Dnia",
 };
+
+/** Kolejność sekcji skuteczności (klucze category_stats = qtype). */
+const QTYPE_ORDER = ["model_guess", "feature_yn", "left_right", "theory"];
 
 export default async function ProfilePage() {
   const supabase = await createSupabaseServerClient();
@@ -60,6 +64,19 @@ export default async function ProfilePage() {
   const companyName = Array.isArray(companyRel)
     ? ((companyRel[0] as { name?: string } | undefined)?.name ?? "—")
     : ((companyRel as { name?: string } | null)?.name ?? "—");
+  const categoryStats = (stats?.category_stats ?? {}) as Record<
+    string,
+    { total?: number; correct?: number }
+  >;
+  const statRows = QTYPE_ORDER.map((qtype) => {
+    const s = categoryStats[qtype];
+    return {
+      qtype,
+      info: QTYPE_INFO[qtype],
+      total: s?.total ?? 0,
+      correct: s?.correct ?? 0,
+    };
+  }).filter((r) => r.total > 0);
 
   return (
     <AppShell active="profil">
@@ -102,6 +119,36 @@ export default async function ProfilePage() {
         </div>
 
         <Card>
+          <h2 className="font-bold">Skuteczność wg kategorii</h2>
+          {statRows.length ? (
+            <div className="mt-3 space-y-3">
+              {statRows.map((r) => {
+                const pct = Math.round((r.correct / r.total) * 100);
+                return (
+                  <div key={r.qtype}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium text-gray-700">
+                        {r.info.icon} {r.info.title}
+                      </span>
+                      <span className="text-gray-500">
+                        {r.correct}/{r.total} ·{" "}
+                        <span className="font-semibold text-gray-700">{pct}%</span>
+                      </span>
+                    </div>
+                    <Progress value={r.correct} max={r.total} className="mt-1 h-1.5" />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-gray-500">
+              Zagraj pierwszą sesję, a pokażemy, gdzie jesteś mocny, a gdzie
+              warto potrenować.
+            </p>
+          )}
+        </Card>
+
+        <Card>
           <h2 className="font-bold">
             Odznaki{" "}
             <span className="text-sm font-normal text-gray-400">
@@ -140,7 +187,9 @@ export default async function ProfilePage() {
                     <p className="font-semibold">
                       {MODE_LABEL[s.mode] ?? s.mode}
                       {s.mode === "learning" && s.category ? (
-                        <span className="ml-1 text-xs text-gray-400">({s.category})</span>
+                        <span className="ml-1 text-xs text-gray-400">
+                          ({CATEGORY_INFO[s.category as Category]?.title ?? s.category})
+                        </span>
                       ) : null}
                     </p>
                     <p className="text-xs text-gray-400">

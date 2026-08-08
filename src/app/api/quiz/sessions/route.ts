@@ -12,7 +12,8 @@ export async function POST(request: Request) {
     const result = await startSession(
       user.id,
       body.data.mode,
-      body.data.category,
+      body.data.categories ??
+        (body.data.category ? [body.data.category] : undefined),
     );
     return NextResponse.json(result, { status: 201 });
   });

@@ -57,26 +57,31 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* ranga */}
-        <Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                Twoja ranga
-              </p>
-              <p className="text-lg font-bold text-gray-800">{rank.name}</p>
+        {/* ranga → statystyki */}
+        <Link href="/profil" className="block">
+          <Card className="transition-all hover:border-dre-400 hover:shadow-md">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Twoja ranga
+                </p>
+                <p className="text-lg font-bold text-gray-800">{rank.name}</p>
+              </div>
+              <Chip tone="orange">{data.totalXp} XP</Chip>
             </div>
-            <Chip tone="orange">{data.totalXp} XP</Chip>
-          </div>
-          {rank.next && (
-            <>
-              <Progress value={rank.progress * 100} className="mt-3" />
-              <p className="mt-1.5 text-xs text-gray-400">
-                {rank.next.threshold - data.totalXp} XP do rangi „{rank.next.name}”
-              </p>
-            </>
-          )}
-        </Card>
+            {rank.next && (
+              <>
+                <Progress value={rank.progress * 100} className="mt-3" />
+                <p className="mt-1.5 text-xs text-gray-400">
+                  {rank.next.threshold - data.totalXp} XP do rangi „{rank.next.name}”
+                </p>
+              </>
+            )}
+            <p className="mt-2 text-xs font-semibold text-dre-600">
+              Zobacz statystyki i odznaki →
+            </p>
+          </Card>
+        </Link>
 
         {/* Quiz Dnia */}
         <Card className={data.dailyQuizDone ? "opacity-70" : "border-dre-300 bg-dre-50/60"}>
