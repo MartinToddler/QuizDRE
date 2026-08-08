@@ -8,10 +8,20 @@ function isCategory(value: string): value is Category {
   return (CATEGORIES as readonly string[]).includes(value);
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function GamePage({
   searchParams,
 }: {
-  searchParams: Promise<{ mode?: string; category?: string; categories?: string }>;
+  searchParams: Promise<{
+    mode?: string;
+    category?: string;
+    categories?: string;
+    sesja?: string;
+    /** Id poprzedniej sesji z linku „Jeszcze raz” — tylko różnicuje key. */
+    po?: string;
+  }>;
 }) {
   const params = await searchParams;
   const mode = params.mode as Mode | undefined;
@@ -29,9 +39,19 @@ export default async function GamePage({
     categories = [params.category];
   }
 
+  // ?sesja=<id> wpisuje klient po starcie — odświeżenie wznawia TĘ sesję.
+  const resumeSessionId =
+    params.sesja && UUID_RE.test(params.sesja) ? params.sesja : undefined;
+
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-6">
-      <QuizGame mode={mode} categories={categories} />
+      {/* key: zmiana parametrów (np. „Jeszcze raz” bez `sesja`) = świeży montaż gry */}
+      <QuizGame
+        key={`${mode}|${categories?.join(",") ?? ""}|${resumeSessionId ?? ""}|${params.po ?? ""}`}
+        mode={mode}
+        categories={categories}
+        resumeSessionId={resumeSessionId}
+      />
     </main>
   );
 }

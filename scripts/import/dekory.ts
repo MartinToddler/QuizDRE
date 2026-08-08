@@ -12,6 +12,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
+import { foldName as fold } from "../../src/lib/engine/feature-copy";
 import { featureKind } from "../../src/lib/engine/types";
 import { adminClient, ensureBucket, levenshtein, STORAGE_BUCKET } from "../lib/db";
 
@@ -27,17 +28,6 @@ const CONTENT_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".webp": "image/webp",
 };
-
-/** Porównanie tolerancyjne: małe litery, bez diakrytyków, pojedyncze spacje. */
-function fold(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ł/g, "l")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function slug(s: string): string {
   return fold(s).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");

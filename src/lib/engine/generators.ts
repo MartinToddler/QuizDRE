@@ -1,3 +1,4 @@
+import { technicalCopy } from "./feature-copy";
 import { chance, pick, randInt, shuffle, weightedPick, type Rng } from "./rng";
 import {
   CATEGORY_TO_QTYPE,
@@ -201,20 +202,27 @@ function genFeature(
   const dekorName = featureDisplayName(feature);
   const group = feature.category?.trim();
 
+  // Technika: indywidualna składnia per kolumna Excela (feature-copy.ts);
+  // nazwy nieznane (przyszłe kolumny) dostają gramatycznie bezpieczny fallback.
+  const copy = isDekor ? null : technicalCopy(feature.name);
+  const prompt = isDekor
+    ? `Czy model ${model.name} występuje w dekorze „${dekorName}”?`
+    : (copy?.question.replace("{model}", model.name) ??
+      `Czy skrzydło ${model.name} ma cechę „${feature.name}”?`);
+  const explanation = isDekor
+    ? `Dekor „${dekorName}”${group ? ` (${group})` : ""} w modelu ${model.name}: ${verdict}.`
+    : `„${copy?.label ?? feature.name}” — ${model.name}: ${verdict}.`;
+
   return {
     qtype: "feature_yn",
     dedupeKey: `f:${cell.modelId}:${cell.featureId}`,
     payload: {
       qtype: "feature_yn",
-      prompt: isDekor
-        ? `Czy model ${model.name} występuje w dekorze „${dekorName}”?`
-        : `Czy „${feature.name}” występuje w modelu ${model.name}?`,
+      prompt,
       options: ["TAK", "NIE"],
     },
     correctAnswer: { value: verdict },
-    explanation: isDekor
-      ? `Dekor „${dekorName}”${group ? ` (${group})` : ""} w modelu ${model.name}: ${verdict}.`
-      : `„${feature.name}” w modelu ${model.name}: ${verdict}.`,
+    explanation,
     imagePath: model.photoOriginalPath,
     swatchPath: isDekor ? feature.imagePath : null,
   };

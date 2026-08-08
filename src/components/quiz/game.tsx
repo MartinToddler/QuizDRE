@@ -73,9 +73,12 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 export function QuizGame({
   mode,
   categories,
+  resumeSessionId,
 }: {
   mode: Mode;
   categories?: Category[];
+  /** Z parametru `sesja` w URL — odświeżenie strony wznawia tę sesję. */
+  resumeSessionId?: string;
 }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
@@ -121,7 +124,7 @@ export function QuizGame({
       try {
         const res = await api<SessionStartDto>("/api/quiz/sessions", {
           method: "POST",
-          body: JSON.stringify({ mode, categories }),
+          body: JSON.stringify({ mode, categories, resume: resumeSessionId }),
         });
         setSessionId(res.sessionId);
         setQuestions(res.questions);
@@ -132,6 +135,12 @@ export function QuizGame({
         setResumed(res.resumed);
         // pierwsze z serwowanych pytań jest już oznaczone po stronie serwera
         if (res.questions[0]) servedRef.current.add(res.questions[0].seq);
+        // Id sesji do adresu (bez nawigacji) — odświeżenie wznowi TĘ sesję,
+        // a świadome wejście z pickera (bez `sesja`) zawsze zacznie nową.
+        const url = new URLSearchParams({ mode });
+        if (categories?.length) url.set("categories", categories.join(","));
+        url.set("sesja", res.sessionId);
+        window.history.replaceState(null, "", `/quiz/gra?${url.toString()}`);
         setPhase({ kind: "playing" });
       } catch (e) {
         setPhase({ kind: "error", code: (e as Error).message });
@@ -140,7 +149,7 @@ export function QuizGame({
     return () => {
       if (autoNextRef.current) clearTimeout(autoNextRef.current);
     };
-  }, [mode, categories]);
+  }, [mode, categories, resumeSessionId]);
 
   // Beacon „pytanie wyświetlone” — startuje serwerowy pomiar czasu.
   const markServed = useCallback(
@@ -283,11 +292,13 @@ export function QuizGame({
   }
 
   if (phase.kind === "summary") {
+    // `po` (id zakończonej sesji) czyni link unikalnym — gwarantuje świeży
+    // montaż gry (nową sesję) przy każdym „Jeszcze raz”.
     const againHref =
       mode === "learning"
-        ? `/quiz/gra?mode=learning&categories=${(categories ?? ["mix"]).join(",")}`
+        ? `/quiz/gra?mode=learning&categories=${(categories ?? ["mix"]).join(",")}&po=${sessionId ?? ""}`
         : mode === "challenge"
-          ? "/quiz/gra?mode=challenge"
+          ? `/quiz/gra?mode=challenge&po=${sessionId ?? ""}`
           : "/";
     return (
       <ResultScreen

@@ -34,7 +34,9 @@ Aplikacja quizowa do szkolenia z produktów DRE (drzwi). Język UI: polski.
    („dodatkowe informacje”) i dekory — klasyfikacja w JEDNYM miejscu:
    `featureKind()` w `src/lib/engine/types.ts` (grupa „wycofane” → poza
    pulą pytań). Kategorie nauki `technical`/`dekory` współdzielą qtype
-   `feature_yn`; w mix/wyzwaniu rodzaj losowany 50/50.
+   `feature_yn`; w mix/wyzwaniu rodzaj losowany 50/50. Składnia pytań
+   technicznych: per kolumna w `src/lib/engine/feature-copy.ts` — nowa
+   kolumna w Excelu obleje test `catalog-xlsx.test.ts`, dopisz wpis.
 
 ## Wgrywanie danych
 

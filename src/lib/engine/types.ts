@@ -140,6 +140,12 @@ export const startSessionSchema = z.object({
   category: z.enum(CATEGORIES).optional(),
   /** Wybór wielu kategorii nauki (pusta lista lub „mix” = wszystkie). */
   categories: z.array(z.enum(CATEGORIES)).max(8).optional(),
+  /**
+   * Id aktywnej sesji do wznowienia (z parametru `sesja` w URL gry).
+   * Tylko odświeżenie/powrót na kartę wznawia — świadomy start z pickera
+   * nie wysyła tego pola i zawsze zaczyna nową sesję.
+   */
+  resume: z.string().uuid().optional(),
 });
 
 export const submitAnswerSchema = z.object({

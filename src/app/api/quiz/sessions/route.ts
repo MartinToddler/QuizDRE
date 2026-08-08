@@ -14,6 +14,7 @@ export async function POST(request: Request) {
       body.data.mode,
       body.data.categories ??
         (body.data.category ? [body.data.category] : undefined),
+      body.data.resume,
     );
     return NextResponse.json(result, { status: 201 });
   });

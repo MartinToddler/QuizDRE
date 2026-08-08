@@ -283,22 +283,27 @@ export async function startSession(
   userId: string,
   mode: Mode,
   categories?: Category[],
+  resumeId?: string,
 ): Promise<SessionStart> {
   const db = admin();
 
   if (mode === "daily") return startDailySession(db, userId);
 
-  // Aktywna sesja w tym samym trybie → wznowienie zamiast kasowania
-  // postępu (odświeżenie strony / przypadkowe wyjście z gry).
-  const { data: active } = await db
-    .from("quiz_sessions")
-    .select("id, mode, question_count, correct_count, wrong_count, xp_earned")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .maybeSingle();
-  if (active && active.mode === mode) {
-    const resumed = await resumeSession(db, userId, active);
-    if (resumed) return resumed;
+  // Wznowienie TYLKO na jawne żądanie (parametr `sesja` w URL, czyli
+  // odświeżenie/powrót na kartę gry). Świadomy start z pickera nie niesie
+  // resumeId — wtedy zawsze nowa sesja, a starą porzuca create_session.
+  if (resumeId) {
+    const { data: active } = await db
+      .from("quiz_sessions")
+      .select("id, mode, question_count, correct_count, wrong_count, xp_earned")
+      .eq("id", resumeId)
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (active && active.mode === mode) {
+      const resumed = await resumeSession(db, userId, active);
+      if (resumed) return resumed;
+    }
   }
 
   const [snapshot, recent] = await Promise.all([

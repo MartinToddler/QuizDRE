@@ -1,5 +1,7 @@
 import { readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { technicalCopy } from "../../../src/lib/engine/feature-copy";
+import { featureKind } from "../../../src/lib/engine/types";
 import {
   cleanRowName,
   matchModelsToRows,
@@ -137,5 +139,21 @@ describe("dopasowanie modeli (nazwy zdjęć) do kolekcji", () => {
         candidates.some((c) => m === c || m.startsWith(`${c.split(" ")[0]}`)),
       ).toBe(true);
     }
+  });
+});
+
+describe("składnia pytań technicznych (feature-copy)", () => {
+  it("każda kolumna „dodatkowe informacje” z arkusza ma szablon pytania", async () => {
+    const parsed = await parseCatalogXlsx(XLSX);
+    const technical = parsed.features.filter(
+      (f) => featureKind(f.category) === "technical",
+    );
+    expect(technical.length).toBeGreaterThanOrEqual(26);
+    const missing = technical
+      .filter((f) => technicalCopy(f.name) === null)
+      .map((f) => f.name);
+    // Nowa kolumna w przyszłym Excelu? Dopisz wpis w
+    // src/lib/engine/feature-copy.ts zamiast zostawiać fallback.
+    expect(missing).toEqual([]);
   });
 });
