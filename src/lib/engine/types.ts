@@ -10,16 +10,39 @@ export type QType = (typeof QTYPES)[number];
 export const MODES = ["learning", "challenge", "daily"] as const;
 export type Mode = (typeof MODES)[number];
 
-export const CATEGORIES = ["models", "technical", "left_right", "theory", "mix"] as const;
+export const CATEGORIES = [
+  "models",
+  "technical",
+  "dekory",
+  "left_right",
+  "theory",
+  "mix",
+] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 /** Kategoria trybu nauki → typ pytania. */
 export const CATEGORY_TO_QTYPE: Record<Exclude<Category, "mix">, QType> = {
   models: "model_guess",
   technical: "feature_yn",
+  dekory: "feature_yn",
   left_right: "left_right",
   theory: "theory",
 };
+
+/**
+ * Rodzaj cechy z arkusza katalogu: 26 kolumn „dodatkowe informacje” to
+ * technika, pozostałe grupy (cell, CPL, połyskowe…) to dekory/kolory.
+ * Grupa „wycofane” wraca jako null — poza pulą pytań (jej „x” oznacza
+ * status wycofania, nie zwykłą dostępność katalogową).
+ */
+export type FeatureKind = "technical" | "dekor";
+
+export function featureKind(category: string | null): FeatureKind | null {
+  if (category === null) return "technical"; // dane seedowe bez kategorii
+  const c = category.trim().toLowerCase();
+  if (c === "wycofane") return null;
+  return c.includes("dodatkowe informacje") ? "technical" : "dekor";
+}
 
 export type Orientation = "left" | "right";
 
@@ -56,6 +79,8 @@ export interface GeneratedQuestion {
   explanation: string | null;
   /** Ścieżka w prywatnym buckecie; serwer podmienia na signed URL przy serwowaniu. */
   imagePath: string | null;
+  /** Próbka dekoru (pytania o dekory) — jak imagePath, signed URL przy serwowaniu. */
+  swatchPath: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -76,6 +101,10 @@ export interface DoorModelData {
 export interface FeatureData {
   id: string;
   name: string;
+  /** Grupa z arkusza („dodatkowe informacje”, „CPL”, „cell”…) — patrz featureKind. */
+  category: string | null;
+  /** Próbka dekoru w prywatnym buckecie (import: scripts/import/dekory.ts). */
+  imagePath: string | null;
 }
 
 export interface ModelFeatureCell {

@@ -4,22 +4,29 @@ import {
   composeChallengeBatch,
   composeDailyQuiz,
   composeLearningSession,
+  featureKindAvailability,
   generateQuestion,
   newGenState,
   typeAvailability,
 } from "../generators";
 import { mulberry32 } from "../rng";
-import { flipOrientation } from "../types";
+import { featureKind, flipOrientation } from "../types";
 import { makeSnapshot } from "./fixtures";
 
 describe("dostępność typów", () => {
   it("liczy pule dla wszystkich typów", () => {
     const snap = makeSnapshot();
     const avail = typeAvailability(snap);
-    expect(avail.feature_yn).toBe(120);
+    // 12 modeli × (5 technicznych + 4 dekory); wycofana cecha poza pulą
+    expect(avail.feature_yn).toBe(108);
     expect(avail.left_right).toBe(12);
     expect(avail.model_guess).toBe(12);
     expect(avail.theory).toBe(30);
+  });
+
+  it("rozdziela pulę cech na technikę i dekory", () => {
+    const snap = makeSnapshot();
+    expect(featureKindAvailability(snap)).toEqual({ technical: 60, dekor: 48 });
   });
 
   it("model_guess wymaga min. 4 modeli", () => {
@@ -59,6 +66,87 @@ describe("typ 1: cecha TAK/NIE", () => {
     );
     const keys = session.map((q) => q.dedupeKey);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe("podział technika / dekory", () => {
+  const TECH_IDS = new Set(["feat-1", "feat-2", "feat-3", "feat-4", "feat-5"]);
+  const featId = (dedupeKey: string) => dedupeKey.split(":")[2];
+
+  it("featureKind klasyfikuje grupy z arkusza", () => {
+    expect(featureKind("dodatkowe informacje")).toBe("technical");
+    expect(featureKind(null)).toBe("technical"); // dane seedowe bez kategorii
+    expect(featureKind("CPL")).toBe("dekor");
+    expect(featureKind("lakierowane LUX")).toBe("dekor");
+    expect(featureKind("wycofane")).toBeNull();
+    expect(featureKind(" WYCOFANE ")).toBeNull();
+  });
+
+  it("kategoria „technical” pyta wyłącznie o cechy techniczne", () => {
+    const snap = makeSnapshot();
+    const session = composeLearningSession(snap, "technical", newGenState(), mulberry32(13));
+    expect(session).toHaveLength(20);
+    for (const q of session) {
+      expect(TECH_IDS.has(featId(q.dedupeKey))).toBe(true);
+      expect(q.payload.prompt).not.toContain("dekorze");
+    }
+  });
+
+  it("kategoria „dekory” pyta wyłącznie o dekory, ze zdjęciem modelu i próbką", () => {
+    const snap = makeSnapshot();
+    const modelById = new Map(snap.models.map((m) => [m.id, m]));
+    const featureById = new Map(snap.features.map((f) => [f.id, f]));
+    const session = composeLearningSession(snap, "dekory", newGenState(), mulberry32(14));
+    expect(session).toHaveLength(20);
+    for (const q of session) {
+      const [, modelId, fid] = q.dedupeKey.split(":");
+      expect(TECH_IDS.has(fid)).toBe(false);
+      expect(q.payload.prompt).toContain("dekorze");
+      expect(q.imagePath).toBe(modelById.get(modelId)!.photoOriginalPath);
+      expect(q.swatchPath).toBe(featureById.get(fid)!.imagePath);
+    }
+  });
+
+  it("prompt dekoru bez sufiksu grupy; grupa w wyjaśnieniu", () => {
+    const snap = makeSnapshot();
+    // zawęź macierz do cechy „Orzech (CPL)” — pytanie musi paść o nią
+    snap.matrix = snap.matrix.filter((c) => c.featureId === "feat-6");
+    const q = generateQuestion("feature_yn", snap, newGenState(), mulberry32(1))!;
+    expect(q.payload.prompt).toContain("„Orzech”");
+    expect(q.payload.prompt).not.toContain("Orzech (CPL)");
+    expect(q.explanation).toContain("(CPL)");
+  });
+
+  it("cechy wycofane nigdy nie wypadają", () => {
+    const snap = makeSnapshot();
+    for (let seed = 1; seed <= 10; seed++) {
+      const state = newGenState();
+      const rng = mulberry32(seed);
+      for (;;) {
+        const q = generateQuestion("feature_yn", snap, state, rng);
+        if (!q) break;
+        expect(featId(q.dedupeKey)).not.toBe("feat-10");
+      }
+    }
+  });
+
+  it("mix losuje technikę i dekory ~po połowie (mimo przewagi dekorów w macierzy)", () => {
+    const snap = makeSnapshot();
+    let tech = 0;
+    let total = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const state = newGenState();
+      const rng = mulberry32(seed);
+      for (let i = 0; i < 6; i++) {
+        const q = generateQuestion("feature_yn", snap, state, rng);
+        if (!q) break;
+        total += 1;
+        if (TECH_IDS.has(featId(q.dedupeKey))) tech += 1;
+      }
+    }
+    const share = tech / total;
+    expect(share).toBeGreaterThan(0.38);
+    expect(share).toBeLessThan(0.62);
   });
 });
 
@@ -201,7 +289,7 @@ describe("kompozycja sesji", () => {
       expect(qs).toHaveLength(CHALLENGE_BATCH_SIZE);
       total.push(...qs.map((q) => q.dedupeKey));
     }
-    expect(total).toHaveLength(300); // pula ~174 → reset dedupe zadziałał
+    expect(total).toHaveLength(300); // pula ~162 → reset dedupe zadziałał
   });
 
   it("Quiz Dnia: 10 pytań wg szablonu i deterministyczny przy tym samym seedzie", () => {

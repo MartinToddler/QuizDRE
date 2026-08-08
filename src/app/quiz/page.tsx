@@ -20,8 +20,13 @@ const CATEGORY_INFO: Record<
   },
   technical: {
     title: "Rozwiązania techniczne",
-    desc: "Czy dana cecha występuje w danym modelu? TAK / NIE.",
+    desc: "Przylgi, wysokości, zawiasy — czy cecha występuje w modelu?",
     icon: "🔧",
+  },
+  dekory: {
+    title: "Dekory",
+    desc: "Czy model występuje w danym dekorze? TAK / NIE.",
+    icon: "🎨",
   },
   left_right: {
     title: "Prawe / lewe",

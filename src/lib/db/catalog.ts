@@ -2,6 +2,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CatalogSnapshot, Orientation } from "@/lib/engine";
 import { SIGNED_URL_TTL_SECONDS, STORAGE_BUCKET } from "@/lib/env";
 
+/** Kolumna z 0007 może jeszcze nie istnieć (okno deploy → migracja). */
+async function selectFeatures(db: SupabaseClient) {
+  const full = await db
+    .from("features")
+    .select("id, name, category, image_path")
+    .eq("active", true);
+  if (full.error?.code !== "42703") return full;
+  const legacy = await db.from("features").select("id, name, category").eq("active", true);
+  return {
+    ...legacy,
+    data: legacy.data?.map((f) => ({ ...f, image_path: null })) ?? null,
+  };
+}
+
 /**
  * Migawka katalogu dla generatorów. Dane są małe (setki wierszy) —
  * ładujemy całość; wołać WYŁĄCZNIE z klientem service role.
@@ -16,7 +30,7 @@ export async function loadCatalogSnapshot(
         "id, name, collection, original_orientation, photo_original_path, photo_mirrored_path, eligible_left_right, eligible_model_guess",
       )
       .eq("active", true),
-    db.from("features").select("id, name").eq("active", true),
+    selectFeatures(db),
     db.from("model_features").select("model_id, feature_id, has_feature"),
     db
       .from("theory_questions")
@@ -39,7 +53,12 @@ export async function loadCatalogSnapshot(
       eligibleLeftRight: m.eligible_left_right,
       eligibleModelGuess: m.eligible_model_guess,
     })),
-    features: features.data ?? [],
+    features: (features.data ?? []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      category: f.category,
+      imagePath: f.image_path,
+    })),
     matrix: (matrix.data ?? []).map((c) => ({
       modelId: c.model_id,
       featureId: c.feature_id,

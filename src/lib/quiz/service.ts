@@ -58,6 +58,10 @@ function mapDbError(message: string): QuizError {
   for (const [code, status] of Object.entries(known)) {
     if (message.includes(code)) return new QuizError(code, status);
   }
+  // Kategoria „dekory” wymaga migracji 0007 (check constraint w bazie).
+  if (message.includes("quiz_sessions_category_check")) {
+    return new QuizError("migration_required", 503);
+  }
   return new QuizError(`db_error: ${message}`, 500);
 }
 
@@ -67,6 +71,7 @@ export interface ServedQuestion {
   qtype: string;
   payload: QuestionPayload;
   imageUrl: string | null;
+  swatchUrl: string | null;
   mode: Mode;
   correctCount: number;
 }
@@ -81,6 +86,8 @@ export interface QuestionDto {
   qtype: string;
   payload: QuestionPayload;
   imageUrl: string | null;
+  /** Próbka dekoru (pytania o dekory) — mały obrazek obok zdjęcia modelu. */
+  swatchUrl: string | null;
 }
 
 export interface SessionStart {
@@ -125,6 +132,8 @@ function toDbRows(questions: GeneratedQuestion[], startSeq: number) {
     correctAnswer: q.correctAnswer,
     explanation: q.explanation,
     imagePath: q.imagePath,
+    // starsze wpisy daily_quiz nie mają pola — jawny null zamiast undefined
+    swatchPath: q.swatchPath ?? null,
   }));
 }
 
@@ -151,19 +160,55 @@ async function recentTheoryIds(
   return new Set((rows ?? []).map((r) => r.dedupe_key.slice(2)));
 }
 
+interface QuestionRow {
+  seq: number;
+  qtype: string;
+  payload: unknown;
+  image_path: string | null;
+  swatch_path: string | null;
+  answered_at: string | null;
+}
+
+/**
+ * Select pytań sesji odporny na brak kolumny swatch_path
+ * (okno między deployem a wklejeniem migracji 0007).
+ */
+async function selectQuestionRows(
+  db: SupabaseClient,
+  sessionId: string,
+  opts: { seq?: number; fromSeq?: number },
+): Promise<QuestionRow[]> {
+  const run = (cols: string) => {
+    let q = db
+      .from("session_questions")
+      .select(cols)
+      .eq("session_id", sessionId);
+    if (opts.seq !== undefined) q = q.eq("seq", opts.seq);
+    if (opts.fromSeq !== undefined) {
+      q = q.gte("seq", opts.fromSeq).is("answered_at", null);
+    }
+    return q.order("seq");
+  };
+
+  const base = "seq, qtype, payload, image_path, answered_at";
+  const full = await run(`${base}, swatch_path`);
+  if (!full.error) return (full.data ?? []) as unknown as QuestionRow[];
+  if (full.error.code !== "42703") throw mapDbError(full.error.message);
+
+  const legacy = await run(base);
+  if (legacy.error) throw mapDbError(legacy.error.message);
+  return ((legacy.data ?? []) as unknown as Omit<QuestionRow, "swatch_path">[]).map(
+    (r) => ({ ...r, swatch_path: null }),
+  );
+}
+
 async function serve(
   db: SupabaseClient,
   userId: string,
   session: SessionRow,
   seq: number,
 ): Promise<ServedQuestion> {
-  const { data: q, error } = await db
-    .from("session_questions")
-    .select("seq, qtype, payload, image_path, answered_at")
-    .eq("session_id", session.id)
-    .eq("seq", seq)
-    .maybeSingle();
-  if (error) throw mapDbError(error.message);
+  const [q] = await selectQuestionRows(db, session.id, { seq });
   if (!q) throw new QuizError("question_not_found", 404);
   if (q.answered_at) throw new QuizError("already_answered", 409);
 
@@ -180,6 +225,7 @@ async function serve(
     qtype: q.qtype,
     payload: q.payload as QuestionPayload,
     imageUrl: await signImagePath(db, q.image_path),
+    swatchUrl: await signImagePath(db, q.swatch_path),
     mode: session.mode,
     correctCount: session.correct_count,
   };
@@ -191,24 +237,19 @@ async function serveBatch(
   sessionId: string,
   fromSeq: number,
 ): Promise<QuestionDto[]> {
-  const { data, error } = await db
-    .from("session_questions")
-    .select("seq, qtype, payload, image_path")
-    .eq("session_id", sessionId)
-    .gte("seq", fromSeq)
-    .is("answered_at", null)
-    .order("seq");
-  if (error) throw mapDbError(error.message);
-  const rows = data ?? [];
+  const rows = await selectQuestionRows(db, sessionId, { fromSeq });
   const signed = await signImagePaths(
     db,
-    rows.map((r) => r.image_path).filter((p): p is string => Boolean(p)),
+    rows
+      .flatMap((r) => [r.image_path, r.swatch_path])
+      .filter((p): p is string => Boolean(p)),
   );
   return rows.map((r) => ({
     seq: r.seq,
     qtype: r.qtype,
     payload: r.payload as QuestionPayload,
     imageUrl: r.image_path ? (signed.get(r.image_path) ?? null) : null,
+    swatchUrl: r.swatch_path ? (signed.get(r.swatch_path) ?? null) : null,
   }));
 }
 

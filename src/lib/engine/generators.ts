@@ -1,13 +1,21 @@
 import { chance, pick, randInt, shuffle, weightedPick, type Rng } from "./rng";
 import {
   CATEGORY_TO_QTYPE,
+  featureKind,
   flipOrientation,
   type CatalogSnapshot,
   type Category,
   type DoorModelData,
+  type FeatureData,
+  type FeatureKind,
   type GeneratedQuestion,
   type QType,
 } from "./types";
+
+/** Opcje generacji — na razie tylko zawężenie cech do techniki albo dekorów. */
+export interface GenerateOptions {
+  featureKind?: FeatureKind;
+}
 
 /** Minimalna pula, by typ pytań był dostępny (inaczej kategoria ukryta). */
 export const MIN_POOL_FOR_TYPE = 8;
@@ -70,12 +78,28 @@ function guessPool(snapshot: CatalogSnapshot): DoorModelData[] {
   );
 }
 
+/** Liczba komórek macierzy per rodzaj cechy (bez wykluczonych, np. „wycofane”). */
+export function featureKindAvailability(
+  snapshot: CatalogSnapshot,
+): Record<FeatureKind, number> {
+  const kindById = new Map(
+    snapshot.features.map((f) => [f.id, featureKind(f.category)]),
+  );
+  const out: Record<FeatureKind, number> = { technical: 0, dekor: 0 };
+  for (const cell of snapshot.matrix) {
+    const kind = kindById.get(cell.featureId);
+    if (kind) out[kind] += 1;
+  }
+  return out;
+}
+
 export function typeAvailability(
   snapshot: CatalogSnapshot,
 ): Record<QType, number> {
   const guess = guessPool(snapshot);
+  const kinds = featureKindAvailability(snapshot);
   return {
-    feature_yn: snapshot.matrix.length,
+    feature_yn: kinds.technical + kinds.dekor,
     left_right: lrPool(snapshot).length,
     // Potrzebujemy celu + 3 dystraktorów o unikatowych nazwach.
     model_guess: guess.length >= 4 ? guess.length : 0,
@@ -107,19 +131,49 @@ function computeFeatureShares(snapshot: CatalogSnapshot): Map<string, number> {
   return shares;
 }
 
+/** Nazwa dekoru do wyświetlenia — bez sufiksu kolizyjnego „ (grupa)”. */
+function featureDisplayName(f: FeatureData): string {
+  const suffix = f.category ? ` (${f.category.trim()})` : "";
+  return suffix && f.name.endsWith(suffix)
+    ? f.name.slice(0, -suffix.length)
+    : f.name;
+}
+
 function genFeature(
   snapshot: CatalogSnapshot,
   state: GenState,
   rng: Rng,
+  opts?: GenerateOptions,
 ): GeneratedQuestion | null {
   const modelById = new Map(snapshot.models.map((m) => [m.id, m]));
-  const featureById = new Map(snapshot.features.map((f) => [f.id, f]));
-  const cells = snapshot.matrix.filter(
+  const featureById = new Map<string, FeatureData>();
+  const kindById = new Map<string, FeatureKind>();
+  for (const f of snapshot.features) {
+    const kind = featureKind(f.category);
+    if (kind === null) continue; // np. grupa „wycofane” — poza pulą pytań
+    featureById.set(f.id, f);
+    kindById.set(f.id, kind);
+  }
+
+  let cells = snapshot.matrix.filter(
     (c) =>
       !state.usedKeys.has(`f:${c.modelId}:${c.featureId}`) &&
       modelById.has(c.modelId) &&
       featureById.has(c.featureId),
   );
+  if (cells.length === 0) return null;
+
+  // Rodzaj cechy: jawny filtr (kategorie nauki) albo losowanie 50/50 —
+  // dekorów jest ~4× więcej niż cech technicznych i bez wyrównania
+  // zalewają pulę pytań mieszanych.
+  let kind = opts?.featureKind ?? null;
+  if (!kind) {
+    const hasTechnical = cells.some((c) => kindById.get(c.featureId) === "technical");
+    const hasDekor = cells.some((c) => kindById.get(c.featureId) === "dekor");
+    if (hasTechnical && hasDekor) kind = chance(rng, 0.5) ? "technical" : "dekor";
+    else kind = hasTechnical ? "technical" : "dekor";
+  }
+  cells = cells.filter((c) => kindById.get(c.featureId) === kind);
   if (cells.length === 0) return null;
 
   // Balans TAK/NIE: waga korygująca zależna od dotychczasowej przewagi.
@@ -142,17 +196,27 @@ function genFeature(
   else state.noCount += 1;
   state.usedKeys.add(`f:${cell.modelId}:${cell.featureId}`);
 
+  const verdict = cell.hasFeature ? "TAK" : "NIE";
+  const isDekor = kind === "dekor";
+  const dekorName = featureDisplayName(feature);
+  const group = feature.category?.trim();
+
   return {
     qtype: "feature_yn",
     dedupeKey: `f:${cell.modelId}:${cell.featureId}`,
     payload: {
       qtype: "feature_yn",
-      prompt: `Czy „${feature.name}” występuje w modelu ${model.name}?`,
+      prompt: isDekor
+        ? `Czy model ${model.name} występuje w dekorze „${dekorName}”?`
+        : `Czy „${feature.name}” występuje w modelu ${model.name}?`,
       options: ["TAK", "NIE"],
     },
-    correctAnswer: { value: cell.hasFeature ? "TAK" : "NIE" },
-    explanation: `„${feature.name}” w modelu ${model.name}: ${cell.hasFeature ? "TAK" : "NIE"}.`,
-    imagePath: null,
+    correctAnswer: { value: verdict },
+    explanation: isDekor
+      ? `Dekor „${dekorName}”${group ? ` (${group})` : ""} w modelu ${model.name}: ${verdict}.`
+      : `„${feature.name}” w modelu ${model.name}: ${verdict}.`,
+    imagePath: model.photoOriginalPath,
+    swatchPath: isDekor ? feature.imagePath : null,
   };
 }
 
@@ -185,6 +249,7 @@ function genLeftRight(
     correctAnswer: { value: displayed === "left" ? "LEWE" : "PRAWE" },
     explanation: ORIENTATION_EXPLANATION,
     imagePath: mirrored ? model.photoMirroredPath : model.photoOriginalPath,
+    swatchPath: null,
   };
 }
 
@@ -248,6 +313,7 @@ function genModelGuess(
       ? `To ${target.name} z kolekcji ${target.collection}.`
       : `To ${target.name}.`,
     imagePath: target.photoOriginalPath,
+    swatchPath: null,
   };
 }
 
@@ -290,12 +356,18 @@ function genTheory(
     correctAnswer: { index: correctIndex },
     explanation: q.explanation,
     imagePath: null,
+    swatchPath: null,
   };
 }
 
 const GENERATORS: Record<
   QType,
-  (s: CatalogSnapshot, st: GenState, r: Rng) => GeneratedQuestion | null
+  (
+    s: CatalogSnapshot,
+    st: GenState,
+    r: Rng,
+    o?: GenerateOptions,
+  ) => GeneratedQuestion | null
 > = {
   feature_yn: genFeature,
   left_right: genLeftRight,
@@ -308,8 +380,9 @@ export function generateQuestion(
   snapshot: CatalogSnapshot,
   state: GenState,
   rng: Rng,
+  opts?: GenerateOptions,
 ): GeneratedQuestion | null {
-  return GENERATORS[qtype](snapshot, state, rng);
+  return GENERATORS[qtype](snapshot, state, rng, opts);
 }
 
 /* ------------------------------------------------------------------ */
@@ -330,6 +403,13 @@ function generateOfTypes(
   return out;
 }
 
+/** Zawężenie cech dla kategorii nauki (technika vs dekory). */
+function categoryOptions(category: Category): GenerateOptions | undefined {
+  if (category === "technical") return { featureKind: "technical" };
+  if (category === "dekory") return { featureKind: "dekor" };
+  return undefined;
+}
+
 /** Sesja trybu nauki: 20 pytań z kategorii (lub mniej, gdy pula mniejsza). */
 export function composeLearningSession(
   snapshot: CatalogSnapshot,
@@ -339,10 +419,14 @@ export function composeLearningSession(
 ): GeneratedQuestion[] {
   if (category !== "mix") {
     const qtype = CATEGORY_TO_QTYPE[category];
-    const wanted = Math.min(LEARNING_SESSION_SIZE, typeAvailability(snapshot)[qtype]);
+    const opts = categoryOptions(category);
+    const available = opts?.featureKind
+      ? featureKindAvailability(snapshot)[opts.featureKind]
+      : typeAvailability(snapshot)[qtype];
+    const wanted = Math.min(LEARNING_SESSION_SIZE, available);
     const out: GeneratedQuestion[] = [];
     while (out.length < wanted) {
-      const q = generateQuestion(qtype, snapshot, state, rng);
+      const q = generateQuestion(qtype, snapshot, state, rng, opts);
       if (!q) break;
       out.push(q);
     }

@@ -6,7 +6,10 @@ import type {
   TheoryQuestionData,
 } from "../types";
 
-/** Katalog testowy: 12 modeli w 3 kolekcjach, 10 cech, 30 pytań teorii. */
+/**
+ * Katalog testowy: 12 modeli w 3 kolekcjach, 10 cech (5 technicznych,
+ * 4 dekory w 2 grupach, 1 wycofana — poza pulą pytań), 30 pytań teorii.
+ */
 export function makeSnapshot(): CatalogSnapshot {
   const collections = ["Nova", "Deco", "Vetro"];
   const models: DoorModelData[] = [];
@@ -26,10 +29,20 @@ export function makeSnapshot(): CatalogSnapshot {
     }
   }
 
-  const features: FeatureData[] = Array.from({ length: 10 }, (_, i) => ({
-    id: `feat-${i + 1}`,
-    name: `Cecha ${i + 1}`,
-  }));
+  const features: FeatureData[] = [
+    ...Array.from({ length: 5 }, (_, i) => ({
+      id: `feat-${i + 1}`,
+      name: `Cecha ${i + 1}`,
+      category: "dodatkowe informacje",
+      imagePath: null,
+    })),
+    // nazwa z sufiksem kolizyjnym — prompt ma pokazać „Orzech”, nie „Orzech (CPL)”
+    { id: "feat-6", name: "Orzech (CPL)", category: "CPL", imagePath: "dekory/orzech-cpl.jpg" },
+    { id: "feat-7", name: "Dąb sonoma", category: "CPL", imagePath: null },
+    { id: "feat-8", name: "Orzech (cell)", category: "cell", imagePath: "dekory/orzech-cell.jpg" },
+    { id: "feat-9", name: "Biel", category: "cell", imagePath: null },
+    { id: "feat-10", name: "Dekor wycofany", category: "wycofane", imagePath: null },
+  ];
 
   // Deterministyczna, zróżnicowana macierz: ~połowa komórek na TAK.
   const matrix: ModelFeatureCell[] = [];

@@ -18,6 +18,7 @@ interface QuestionDto {
   qtype: string;
   payload: QuestionPayload;
   imageUrl: string | null;
+  swatchUrl: string | null;
 }
 
 interface SessionStartDto {
@@ -145,9 +146,11 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
     const current = questions[idx];
     if (current) markServed(current.seq);
     for (const q of questions.slice(idx, idx + 4)) {
-      if (q.imageUrl) {
-        const img = new Image();
-        img.src = q.imageUrl;
+      for (const url of [q.imageUrl, q.swatchUrl]) {
+        if (url) {
+          const img = new Image();
+          img.src = url;
+        }
       }
     }
   }, [phase.kind, idx, questions, markServed]);
@@ -236,6 +239,8 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
       daily_already_played: "Dzisiejszy Quiz Dnia już zaliczony. Wróć jutro!",
       no_questions: "Baza pytań jest pusta — najpierw zaimportuj dane.",
       unauthorized: "Sesja wygasła. Zaloguj się ponownie.",
+      migration_required:
+        "Nowa wersja czeka na migrację bazy — wklej supabase/migrations/0007_dekory.sql w Supabase SQL Editor.",
     };
     return (
       <div className="mx-auto max-w-sm py-16 text-center">
@@ -310,16 +315,35 @@ export function QuizGame({ mode, category }: { mode: Mode; category?: Category }
       {/* pytanie */}
       <h1 className="mt-4 text-xl font-bold leading-snug">{question.payload.prompt}</h1>
 
-      {question.imageUrl && (
-        <div className="mt-4 flex justify-center rounded-2xl border border-gray-200 bg-gray-50 p-3">
+      {(question.imageUrl || question.swatchUrl) && (
+        <div className="mt-4 flex items-center justify-center gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-3">
           {/* Zdjęcia z prywatnego bucketu (signed URL) — bez next/image */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={question.imageUrl}
-            alt="Drzwi — spójrz uważnie"
-            className="max-h-80 rounded-lg object-contain"
-            draggable={false}
-          />
+          {question.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={question.imageUrl}
+              alt="Drzwi — spójrz uważnie"
+              className={cn(
+                "rounded-lg object-contain",
+                question.swatchUrl ? "max-h-64" : "max-h-80",
+              )}
+              draggable={false}
+            />
+          )}
+          {question.swatchUrl && (
+            <figure className="shrink-0 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={question.swatchUrl}
+                alt="Próbka dekoru"
+                className="size-24 rounded-lg border border-gray-200 object-cover shadow-sm"
+                draggable={false}
+              />
+              <figcaption className="mt-1 text-[11px] font-medium text-gray-400">
+                dekor
+              </figcaption>
+            </figure>
+          )}
         </div>
       )}
 

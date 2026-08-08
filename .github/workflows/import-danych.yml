@@ -21,6 +21,7 @@ on:
           - zdjecia
           - teoria
           - cechy (excel)
+          - dekory (probki)
         default: wszystko
       proba:
         description: "Tryb próbny (dry-run) — pokaż raport bez zapisu do bazy"
@@ -82,6 +83,13 @@ jobs:
         if: inputs.zakres == 'wszystko' || inputs.zakres == 'cechy (excel)'
         run: >
           npx tsx scripts/import/features.ts
+          ${{ inputs.proba && '--dry-run' || '' }}
+
+      # Po cechach — próbki dopinają się do dekorów już obecnych w bazie.
+      - name: "Import próbek dekorów"
+        if: inputs.zakres == 'wszystko' || inputs.zakres == 'dekory (probki)'
+        run: >
+          npx tsx scripts/import/dekory.ts
           ${{ inputs.proba && '--dry-run' || '' }}
 
       - name: Podsumowanie

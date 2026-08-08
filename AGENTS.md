@@ -27,7 +27,14 @@ Aplikacja quizowa do szkolenia z produktów DRE (drzwi). Język UI: polski.
    `(now() at time zone 'Europe/Warsaw')::date`, w TS: `warsawToday()`.
 5. Zdjęcia drzwi żyją w prywatnym buckecie `door-photos`, nazwy plików to
    hashe (oryginał i lustro nieodróżnialne), serwowane przez signed URLs.
-   Misje w `finish_session` muszą odpowiadać liście w `src/lib/db/dashboard.ts`.
+   Próbki dekorów tamże pod `dekory/` (slugi — nazwa dekoru nie jest tajna,
+   pada w treści pytania). Misje w `finish_session` muszą odpowiadać liście
+   w `src/lib/db/dashboard.ts`.
+6. Cechy z Excela dzielą się wg `features.category` na technikę
+   („dodatkowe informacje”) i dekory — klasyfikacja w JEDNYM miejscu:
+   `featureKind()` w `src/lib/engine/types.ts` (grupa „wycofane” → poza
+   pulą pytań). Kategorie nauki `technical`/`dekory` współdzielą qtype
+   `feature_yn`; w mix/wyzwaniu rodzaj losowany 50/50.
 
 ## Wgrywanie danych
 

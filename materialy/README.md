@@ -22,6 +22,20 @@ wszystkie modele (zdjęcia), których nazwa zaczyna się od nazwy kolekcji —
 najdłuższy prefiks wygrywa, np. `VETRO D2 20` → „Vetro D2”, nie „Vetro E”.
 Modele bez kolekcji i kolekcje bez zdjęć lądują w raporcie importu.
 
+## 📁 `dekory/` — próbki dekorów (kolorów)
+
+- Nazwa pliku = **nazwa dekoru z Excela**, np. `Dąb sonoma 3D.jpg`,
+  `Orzech.png` (rozszerzenia: jpg / jpeg / png / webp). Wielkość liter,
+  odstępy i polskie znaki bez znaczenia — `dab sonoma 3d.jpg` też zadziała.
+- Jeśli ten sam dekor występuje w kilku technologiach (np. „Orzech” w cell
+  i CPL), plik o samej nazwie `Orzech.jpg` będzie niejednoznaczny — nazwij
+  go wtedy pełną nazwą z grupą: `Orzech (CPL).jpg`.
+- Próbka pokazuje się w pytaniach „czy model występuje w dekorze…” obok
+  zdjęcia modelu. Można wgrywać partiami — pytania bez próbki po prostu
+  pokazują samo zdjęcie modelu.
+- Import: workflow **Import danych quizu** z zakresem `dekory (probki)`
+  (wymaga wcześniejszego importu cech).
+
 ## 📁 `zdjecia/` — zdjęcia drzwi
 
 - Nazwa pliku = **nazwa modelu**, np. `Nova 10.jpg`, `Berge 4.png`

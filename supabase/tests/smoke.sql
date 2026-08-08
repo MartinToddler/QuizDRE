@@ -154,6 +154,38 @@ begin
 end $$;
 
 -- ------------------------------------------------------------------
+-- 3c. Dekory (0007): kategoria 'dekory' + swatch_path w obie strony
+-- ------------------------------------------------------------------
+do $$
+declare
+  v_uid uuid := current_setting('test.uid')::uuid;
+  v_sid uuid;
+begin
+  v_sid := public.create_session(
+    v_uid, 'learning', 'dekory', null,
+    '[
+      {"seq":1,"qtype":"feature_yn","dedupeKey":"dk1","payload":{"q":1},"correctAnswer":{"value":"TAK"},"explanation":null,"imagePath":"p/n1a.jpg","swatchPath":"dekory/orzech.jpg"},
+      {"seq":2,"qtype":"feature_yn","dedupeKey":"dk2","payload":{"q":2},"correctAnswer":{"value":"NIE"},"explanation":null,"imagePath":"p/n2a.jpg"}
+    ]'::jsonb
+  );
+
+  assert (select category from public.quiz_sessions where id = v_sid) = 'dekory',
+    'kategoria dekory przyjęta przez check constraint';
+  assert (select swatch_path from public.session_questions
+           where session_id = v_sid and seq = 1) = 'dekory/orzech.jpg',
+    'swatchPath ma trafiać do swatch_path';
+  assert (select swatch_path from public.session_questions
+           where session_id = v_sid and seq = 2) is null,
+    'brak klucza swatchPath = NULL w swatch_path';
+
+  perform public.append_questions(v_uid, v_sid,
+    '[{"seq":3,"qtype":"feature_yn","dedupeKey":"dk3","payload":{"q":3},"correctAnswer":{"value":"TAK"},"explanation":null,"imagePath":null,"swatchPath":"dekory/bialy.jpg"}]'::jsonb);
+  assert (select swatch_path from public.session_questions
+           where session_id = v_sid and seq = 3) = 'dekory/bialy.jpg',
+    'append_questions przenosi swatchPath';
+end $$;
+
+-- ------------------------------------------------------------------
 -- 4. finish_session: bonusy, streak, odznaki, idempotencja
 -- ------------------------------------------------------------------
 do $$
