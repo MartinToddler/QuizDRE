@@ -1,0 +1,57 @@
+# Nadawanie / odbieranie roli administratora — ręcznie z zakładki Actions.
+# Wymaga tych samych sekretów co „Import danych quizu”:
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# oraz wykonanej migracji supabase/migrations/0008_roles.sql.
+
+name: Rola admina
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: "E-mail użytkownika (musi mieć konto w aplikacji)"
+        type: string
+        required: true
+      akcja:
+        description: "Co zrobić"
+        type: choice
+        options:
+          - nadaj
+          - odbierz
+        default: nadaj
+
+concurrency:
+  group: role-admina
+  cancel-in-progress: false
+
+jobs:
+  rola:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Sprawdź sekrety
+        run: |
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Brak sekretów SUPABASE_URL i/lub SUPABASE_SERVICE_ROLE_KEY (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Zainstaluj zależności
+        run: npm ci
+
+      - name: "Zmień rolę"
+        run: >
+          npx tsx scripts/grant-role.ts
+          --email "${{ inputs.email }}"
+          --role admin
+          ${{ inputs.akcja == 'odbierz' && '--revoke' || '' }}

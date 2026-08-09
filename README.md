@@ -166,6 +166,26 @@ Po imporcie zdjęć przejrzyj checklistę z raportu: modele o symetrycznych
 zdjęciach (bez widocznej klamki) wyklucz z pytań prawe/lewe:
 `update door_models set eligible_left_right = false where name in (...);`
 
+## Role
+
+Rola **user** jest niejawna (ma ją każdy zalogowany). Role podwyższone
+(dziś: **admin** — panel administracyjny) trzyma tabela `user_roles`;
+zapisy wyłącznie service role, więc nikt nie nada sobie roli sam.
+
+Nadanie / odebranie admina — **Actions → „Rola admina”** (e-mail +
+nadaj/odbierz; wymaga migracji `0008_roles.sql` i konta danej osoby),
+albo jednorazowo w SQL Editorze:
+
+```sql
+insert into user_roles (user_id, role)
+select id, 'admin' from auth.users where email = 'osoba@firma.pl'
+on conflict do nothing;
+```
+
+Weryfikacja: Ustawienia → karta „Konto” pokazuje chip „Administrator”.
+Nowa rola w przyszłości = `insert into roles (name, description) …` —
+bez zmiany schematu.
+
 ## Testy
 
 ```bash

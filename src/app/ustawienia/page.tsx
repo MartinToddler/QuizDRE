@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
 import { listCompanies } from "@/lib/db/companies";
+import { isAdmin } from "@/lib/db/roles";
 import { createSupabaseServerClient } from "@/lib/db/server";
 import { LogoutButton } from "./logout-button";
 import { PushToggle } from "./push-toggle";
@@ -17,13 +19,14 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/logowanie");
 
-  const [{ data: profile }, companies] = await Promise.all([
+  const [{ data: profile }, companies, admin] = await Promise.all([
     supabase
       .from("profiles")
       .select("display_name, company_id, preferred_reminder_hour")
       .eq("id", user.id)
       .maybeSingle(),
     listCompanies(),
+    isAdmin(user.id),
   ]);
 
   return (
@@ -49,7 +52,10 @@ export default async function SettingsPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-3 font-bold">Konto</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-bold">Konto</h2>
+            {admin && <Chip tone="orange">🛡️ Administrator</Chip>}
+          </div>
           <p className="mb-3 text-sm text-gray-500">{user.email}</p>
           <LogoutButton />
         </Card>

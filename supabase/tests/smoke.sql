@@ -355,4 +355,44 @@ end $$;
 
 reset role;
 
+-- ------------------------------------------------------------------
+-- 9. Role (0008): nadanie tylko service role, RLS, has_role
+-- ------------------------------------------------------------------
+insert into auth.users (email) values ('drugi@dre.pl') returning id as uid2
+\gset
+select set_config('test.uid2', :'uid2', false);
+
+-- nadanie admina testerowi — service role (bez RLS)
+insert into public.user_roles (user_id, role)
+values (current_setting('test.uid')::uuid, 'admin');
+
+-- kontekst JWT wciąż wskazuje testera (sekcja 7)
+set role authenticated;
+do $$
+begin
+  assert (select count(*) from public.user_roles) = 1,
+    'użytkownik widzi tylko własne role';
+  assert public.has_role('admin'), 'has_role(admin) dla admina';
+  assert not public.has_role('nieistniejaca'), 'nieznana rola = false';
+  -- samodzielne nadanie sobie roli → odmowa (brak polityki INSERT)
+  begin
+    insert into public.user_roles (user_id, role)
+    values (current_setting('test.uid')::uuid, 'admin');
+    raise exception 'oczekiwano odmowy zapisu do user_roles';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+-- drugi użytkownik: cudze role niewidoczne, brak admina
+select set_config('request.jwt.claim.sub', current_setting('test.uid2'), false);
+set role authenticated;
+do $$
+begin
+  assert (select count(*) from public.user_roles) = 0,
+    'cudze role MUSZĄ być niewidoczne';
+  assert not public.has_role('admin'), 'drugi użytkownik nie jest adminem';
+end $$;
+reset role;
+
 select 'SMOKE TEST OK' as result;

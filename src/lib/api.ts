@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
+import { isAdmin } from "@/lib/db/roles";
 import { getSessionUser } from "@/lib/db/server";
 import { QuizError } from "@/lib/quiz/service";
 
 export async function requireUser() {
   const user = await getSessionUser();
   if (!user) throw new QuizError("unauthorized", 401);
+  return user;
+}
+
+/** Jak requireUser + rola „admin” (403 bez niej) — dla route'ów panelu admina. */
+export async function requireAdmin() {
+  const user = await requireUser();
+  if (!(await isAdmin(user.id))) throw new QuizError("forbidden", 403);
   return user;
 }
 

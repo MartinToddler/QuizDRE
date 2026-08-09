@@ -37,6 +37,12 @@ Aplikacja quizowa do szkolenia z produktów DRE (drzwi). Język UI: polski.
    `feature_yn`; w mix/wyzwaniu rodzaj losowany 50/50. Składnia pytań
    technicznych: per kolumna w `src/lib/engine/feature-copy.ts` — nowa
    kolumna w Excelu obleje test `catalog-xlsx.test.ts`, dopisz wpis.
+7. Role (0008): „user” jest NIEJAWNA, `user_roles` trzyma tylko role
+   podwyższone (`admin`); zapisy wyłącznie service role (RLS bez polityk
+   zapisu), nadawanie: workflow „Rola admina” / `scripts/grant-role.ts`.
+   Serwer sprawdza przez `requireAdmin()` (`src/lib/api.ts`) — świeży
+   odczyt z bazy, nie JWT; `has_role()` w SQL pod RLS przyszłych tabel
+   panelu admina.
 
 ## Wgrywanie danych
 
