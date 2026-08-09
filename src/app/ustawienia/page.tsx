@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { listCompanies } from "@/lib/db/companies";
@@ -57,6 +59,13 @@ export default async function SettingsPage() {
             {admin && <Chip tone="orange">🛡️ Administrator</Chip>}
           </div>
           <p className="mb-3 text-sm text-gray-500">{user.email}</p>
+          {admin && (
+            <Link href="/admin" className="mb-3 block">
+              <Button variant="outline" className="w-full">
+                🛡️ Panel admina
+              </Button>
+            </Link>
+          )}
           <LogoutButton />
         </Card>
       </div>

@@ -182,7 +182,9 @@ select id, 'admin' from auth.users where email = 'osoba@firma.pl'
 on conflict do nothing;
 ```
 
-Weryfikacja: Ustawienia → karta „Konto” pokazuje chip „Administrator”.
+Weryfikacja: Ustawienia → karta „Konto” pokazuje chip „Administrator”
+oraz przycisk **„Panel admina”** (`/admin`) — CRUD pytań teoretycznych
+i tabela użytkowników (logowania, aktywność, seria, XP, celność).
 Nowa rola w przyszłości = `insert into roles (name, description) …` —
 bez zmiany schematu.
 

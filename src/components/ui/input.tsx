@@ -1,5 +1,10 @@
 import { cn } from "@/lib/cn";
-import type { InputHTMLAttributes, LabelHTMLAttributes, SelectHTMLAttributes } from "react";
+import type {
+  InputHTMLAttributes,
+  LabelHTMLAttributes,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 
 export function Input({
   className,
@@ -9,6 +14,22 @@ export function Input({
     <input
       className={cn(
         "h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-base text-gray-800",
+        "placeholder:text-gray-400 focus:border-dre-500 focus:outline-2 focus:outline-dre-200",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function Textarea({
+  className,
+  ...props
+}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      className={cn(
+        "min-h-24 w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-800",
         "placeholder:text-gray-400 focus:border-dre-500 focus:outline-2 focus:outline-dre-200",
         className,
       )}

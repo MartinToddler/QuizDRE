@@ -42,7 +42,9 @@ Aplikacja quizowa do szkolenia z produktów DRE (drzwi). Język UI: polski.
    zapisu), nadawanie: workflow „Rola admina” / `scripts/grant-role.ts`.
    Serwer sprawdza przez `requireAdmin()` (`src/lib/api.ts`) — świeży
    odczyt z bazy, nie JWT; `has_role()` w SQL pod RLS przyszłych tabel
-   panelu admina.
+   panelu admina. Panel: `/admin` — KAŻDA strona gate'owana
+   `requireAdminPage()`, server actions `assertAdmin()`
+   (`src/lib/admin-guard.ts`).
 
 ## Wgrywanie danych
 
