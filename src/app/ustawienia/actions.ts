@@ -6,7 +6,8 @@ import { createSupabaseServerClient } from "@/lib/db/server";
 
 const schema = z.object({
   displayName: z.string().trim().min(2).max(30),
-  companyId: z.string().uuid(),
+  // pusta wartość = bez firmy (można też odpiąć wybraną wcześniej)
+  companyId: z.union([z.literal(""), z.string().uuid()]),
   reminderHour: z.coerce.number().int().min(0).max(23),
 });
 
@@ -37,7 +38,7 @@ export async function updateSettings(
     .from("profiles")
     .update({
       display_name: parsed.data.displayName,
-      company_id: parsed.data.companyId,
+      company_id: parsed.data.companyId || null,
       preferred_reminder_hour: parsed.data.reminderHour,
     })
     .eq("id", user.id);

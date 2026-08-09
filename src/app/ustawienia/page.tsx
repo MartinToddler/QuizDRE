@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
+import { listCompanies } from "@/lib/db/companies";
 import { createSupabaseServerClient } from "@/lib/db/server";
 import { LogoutButton } from "./logout-button";
 import { PushToggle } from "./push-toggle";
@@ -16,13 +17,13 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/logowanie");
 
-  const [{ data: profile }, { data: companies }] = await Promise.all([
+  const [{ data: profile }, companies] = await Promise.all([
     supabase
       .from("profiles")
       .select("display_name, company_id, preferred_reminder_hour")
       .eq("id", user.id)
       .maybeSingle(),
-    supabase.from("companies").select("id, name").order("name"),
+    listCompanies(),
   ]);
 
   return (
@@ -38,7 +39,7 @@ export default async function SettingsPage() {
               companyId: profile?.company_id ?? "",
               reminderHour: profile?.preferred_reminder_hour ?? 8,
             }}
-            companies={companies ?? []}
+            companies={companies}
           />
         </Card>
 

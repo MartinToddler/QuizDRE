@@ -46,11 +46,9 @@ export function OnboardingForm({
             />
           </div>
           <div>
-            <Label htmlFor="companyId">Firma</Label>
-            <Select id="companyId" name="companyId" required defaultValue="">
-              <option value="" disabled>
-                Wybierz firmę…
-              </option>
+            <Label htmlFor="companyId">Firma (opcjonalnie)</Label>
+            <Select id="companyId" name="companyId" defaultValue="">
+              <option value="">Bez firmy — wybiorę później</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -59,6 +57,7 @@ export function OnboardingForm({
             </Select>
             <p className="mt-1 text-xs text-gray-400">
               Firmy rywalizują w osobnym rankingu (min. 3 aktywne osoby).
+              Zmienisz to w każdej chwili w Ustawieniach.
             </p>
           </div>
           <div>

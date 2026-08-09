@@ -31,8 +31,9 @@ export function SettingsForm({
         />
       </div>
       <div>
-        <Label htmlFor="companyId">Firma</Label>
-        <Select id="companyId" name="companyId" defaultValue={defaults.companyId} required>
+        <Label htmlFor="companyId">Firma (opcjonalnie)</Label>
+        <Select id="companyId" name="companyId" defaultValue={defaults.companyId}>
+          <option value="">Bez firmy</option>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}

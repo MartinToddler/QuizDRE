@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { SetupNotice } from "@/components/setup-notice";
+import { listCompanies } from "@/lib/db/companies";
 import { createSupabaseServerClient } from "@/lib/db/server";
 import { OnboardingForm } from "./onboarding-form";
 
@@ -14,13 +15,13 @@ export default async function OnboardingPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/logowanie");
 
-  const [{ data: profile }, { data: companies }] = await Promise.all([
+  const [{ data: profile }, companies] = await Promise.all([
     supabase
       .from("profiles")
       .select("display_name, company_id, preferred_reminder_hour, onboarded_at")
       .eq("id", user.id)
       .single(),
-    supabase.from("companies").select("id, name").order("name"),
+    listCompanies(),
   ]);
 
   if (profile?.onboarded_at) redirect("/");
@@ -29,7 +30,7 @@ export default async function OnboardingPage() {
     <OnboardingForm
       defaultName={profile?.display_name ?? ""}
       defaultHour={profile?.preferred_reminder_hour ?? 8}
-      companies={companies ?? []}
+      companies={companies}
     />
   );
 }

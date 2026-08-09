@@ -6,7 +6,8 @@ import { createSupabaseServerClient } from "@/lib/db/server";
 
 const schema = z.object({
   displayName: z.string().trim().min(2, "Nick musi mieć min. 2 znaki").max(30),
-  companyId: z.string().uuid("Wybierz firmę"),
+  // wybór firmy jest opcjonalny — pusta wartość = bez firmy
+  companyId: z.union([z.literal(""), z.string().uuid()]),
   reminderHour: z.coerce.number().int().min(0).max(23),
 });
 
@@ -39,7 +40,7 @@ export async function completeOnboarding(
     .from("profiles")
     .update({
       display_name: parsed.data.displayName,
-      company_id: parsed.data.companyId,
+      company_id: parsed.data.companyId || null,
       preferred_reminder_hour: parsed.data.reminderHour,
       onboarded_at: new Date().toISOString(),
     })
