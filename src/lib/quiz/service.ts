@@ -1,6 +1,11 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadCatalogSnapshot, signImagePath, signImagePaths } from "@/lib/db/catalog";
+import {
+  fetchAll,
+  loadCatalogSnapshot,
+  signImagePath,
+  signImagePaths,
+} from "@/lib/db/catalog";
 import { createAdminClient } from "@/lib/db/server";
 import {
   challengeOverComment,
@@ -593,16 +598,25 @@ async function extendChallenge(
   userId: string,
   session: SessionRow,
 ): Promise<void> {
-  const { data: rows } = await db
-    .from("session_questions")
-    .select("qtype, dedupe_key, correct_answer")
-    .eq("session_id", session.id);
+  // Stronami — bardzo długie runy (>1000 pytań) nie mogą gubić dedupe.
+  const rows = await fetchAll<{
+    qtype: string;
+    dedupe_key: string;
+    correct_answer: AnswerValue;
+  }>((from, to) =>
+    db
+      .from("session_questions")
+      .select("qtype, dedupe_key, correct_answer")
+      .eq("session_id", session.id)
+      .order("seq")
+      .range(from, to),
+  );
 
   const usedKeys = new Set<string>();
   let yesCount = 0;
   let noCount = 0;
   const letterCounts: [number, number, number, number] = [0, 0, 0, 0];
-  for (const r of rows ?? []) {
+  for (const r of rows) {
     usedKeys.add(r.dedupe_key);
     const ca = r.correct_answer as AnswerValue;
     if (r.qtype === "feature_yn" && "value" in ca) {
