@@ -37,7 +37,7 @@ describe("dostępność typów", () => {
 });
 
 describe("typ 1: cecha TAK/NIE", () => {
-  it("balansuje odpowiedzi ~50/50 w wielu sesjach", () => {
+  it("balansuje odpowiedzi ~50/50 w wielu sesjach (wariant TAK/NIE)", () => {
     const snap = makeSnapshot();
     let yes = 0;
     let total = 0;
@@ -46,12 +46,13 @@ describe("typ 1: cecha TAK/NIE", () => {
       const state = newGenState();
       const session = composeLearningSession(snap, ["technical"], state, rng);
       for (const q of session) {
+        if (q.payload.options.length !== 2) continue; // ABCD poza balansem TAK/NIE
         total += 1;
         if ("value" in q.correctAnswer && q.correctAnswer.value === "TAK") yes += 1;
       }
     }
     const share = yes / total;
-    expect(total).toBe(50 * 20);
+    expect(total).toBeGreaterThan(250);
     expect(share).toBeGreaterThan(0.42);
     expect(share).toBeLessThan(0.58);
   });
@@ -101,9 +102,14 @@ describe("podział technika / dekory", () => {
     for (const q of session) {
       const [, modelId, fid] = q.dedupeKey.split(":");
       expect(TECH_IDS.has(fid)).toBe(false);
-      expect(q.payload.prompt).toContain("dekorze");
+      expect(q.payload.prompt).toMatch(/dekor(ze|ów)/);
       expect(q.imagePath).toBe(modelById.get(modelId)!.photoOriginalPath);
-      expect(q.swatchPath).toBe(featureById.get(fid)!.imagePath);
+      if (q.payload.options.length === 2) {
+        expect(q.swatchPath).toBe(featureById.get(fid)!.imagePath);
+      } else {
+        // ABCD: próbka poprawnego dekoru zdradzałaby odpowiedź
+        expect(q.swatchPath).toBeNull();
+      }
     }
   });
 
@@ -128,6 +134,92 @@ describe("podział technika / dekory", () => {
         expect(featId(q.dedupeKey)).not.toBe("feat-10");
       }
     }
+  });
+
+  it("oba warianty (TAK/NIE i ABCD) pojawiają się; fakt (model, cecha) nie wraca w żadnym", () => {
+    // 1 cecha na TAK + 4 z jawnym NIE per model — ABCD zawsze wykonalne.
+    const snap = makeSnapshot();
+    snap.features = [
+      { id: "af-0", name: "wysokość 211 cm", category: "dodatkowe informacje", imagePath: null },
+      { id: "af-1", name: "EI30", category: "dodatkowe informacje", imagePath: null },
+      { id: "af-2", name: "Szyba", category: "dodatkowe informacje", imagePath: null },
+      { id: "af-3", name: "Intarsja", category: "dodatkowe informacje", imagePath: null },
+      { id: "af-4", name: "Wstawka", category: "dodatkowe informacje", imagePath: null },
+    ];
+    snap.matrix = snap.models.flatMap((m) =>
+      snap.features.map((f) => ({
+        modelId: m.id,
+        featureId: f.id,
+        hasFeature: f.id === "af-0",
+      })),
+    );
+
+    const counts = { yn: 0, abcd: 0 };
+    for (let seed = 1; seed <= 20; seed++) {
+      const state = newGenState();
+      const rng = mulberry32(seed);
+      const facts = new Set<string>();
+      for (;;) {
+        const q = generateQuestion("feature_yn", snap, state, rng);
+        if (!q) break;
+        if (q.payload.options.length === 4) {
+          counts.abcd += 1;
+          expect(new Set(q.payload.options).size).toBe(4);
+          const idx = "index" in q.correctAnswer ? q.correctAnswer.index : -1;
+          expect(q.payload.options[idx]).toBe("wysokość 211 cm");
+          const falseLabels = new Set([
+            "odporność ogniowa EI30",
+            "wersja z szybą",
+            "intarsja",
+            "wstawka",
+          ]);
+          q.payload.options
+            .filter((_, i) => i !== idx)
+            .forEach((w) => expect(falseLabels.has(w)).toBe(true));
+          expect(q.payload.prompt).toContain("Która z poniższych cech");
+          expect(q.dedupeKey.startsWith("f4:")).toBe(true);
+        } else {
+          counts.yn += 1;
+        }
+        const [, m, f] = q.dedupeKey.split(":");
+        const fact = `${m}:${f}`;
+        expect(facts.has(fact)).toBe(false); // twin TAK/NIE ↔ ABCD zablokowany
+        facts.add(fact);
+      }
+    }
+    expect(counts.yn).toBeGreaterThan(0);
+    expect(counts.abcd).toBeGreaterThan(0);
+  });
+
+  it("ABCD dekorów: bez próbki (anty-leak), poprawna to dekor z TAK", () => {
+    const snap = makeSnapshot();
+    snap.features = [
+      { id: "df-0", name: "Dąb złoty", category: "CPL", imagePath: "dekory/dab-zloty.jpg" },
+      { id: "df-1", name: "Orzech ciemny", category: "CPL", imagePath: "dekory/orzech.jpg" },
+      { id: "df-2", name: "Biel arktyczna", category: "cell", imagePath: null },
+      { id: "df-3", name: "Grafit", category: "cell", imagePath: null },
+      { id: "df-4", name: "Wenge", category: "CPL", imagePath: null },
+    ];
+    snap.matrix = snap.models.flatMap((m) =>
+      snap.features.map((f) => ({
+        modelId: m.id,
+        featureId: f.id,
+        hasFeature: f.id === "df-0",
+      })),
+    );
+
+    let checked = 0;
+    for (let seed = 1; seed <= 40 && checked < 5; seed++) {
+      const q = generateQuestion("feature_yn", snap, newGenState(), mulberry32(seed));
+      if (!q || q.payload.options.length !== 4) continue;
+      checked += 1;
+      expect(q.payload.prompt).toContain("W którym z poniższych dekorów");
+      expect(q.swatchPath).toBeNull();
+      expect(q.imagePath).not.toBeNull();
+      const idx = "index" in q.correctAnswer ? q.correctAnswer.index : -1;
+      expect(q.payload.options[idx]).toBe("Dąb złoty");
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it("mix losuje technikę i dekory ~po połowie (mimo przewagi dekorów w macierzy)", () => {

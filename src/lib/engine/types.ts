@@ -55,7 +55,8 @@ export function flipOrientation(o: Orientation): Orientation {
 /* ------------------------------------------------------------------ */
 
 export type QuestionPayload =
-  | { qtype: "feature_yn"; prompt: string; options: readonly ["TAK", "NIE"] }
+  // 2 opcje = wariant TAK/NIE, 4 opcje = wariant „która cecha?” (ABCD)
+  | { qtype: "feature_yn"; prompt: string; options: string[] }
   | { qtype: "left_right"; prompt: string; options: readonly ["LEWE", "PRAWE"]; hasImage: true }
   | { qtype: "model_guess"; prompt: string; options: string[]; hasImage: true }
   | { qtype: "theory"; prompt: string; options: string[] };

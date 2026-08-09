@@ -47,11 +47,19 @@ export function AnswerGrid({
 }) {
   const disabled = correct !== null || selected !== null;
 
-  if (payload.qtype === "feature_yn" || payload.qtype === "left_right") {
+  // Wariant binarny po KSZTAŁCIE opcji: feature_yn z 4 opcjami („która
+  // cecha?”) renderuje się jak ABCD i odpowiada indeksem.
+  const binary =
+    payload.qtype === "left_right" ||
+    (payload.qtype === "feature_yn" && payload.options.length === 2);
+
+  if (binary) {
     return (
       <div className="grid grid-cols-2 gap-3">
         {payload.options.map((opt) => {
-          const value: AnswerValue = { value: opt };
+          const value: AnswerValue = {
+            value: opt as "TAK" | "NIE" | "LEWE" | "PRAWE",
+          };
           const tone = buttonTone(value, selected, correct);
           return (
             <button

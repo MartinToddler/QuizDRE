@@ -10,6 +10,7 @@ import {
   type FeatureData,
   type FeatureKind,
   type GeneratedQuestion,
+  type ModelFeatureCell,
   type QType,
 } from "./types";
 
@@ -140,6 +141,109 @@ function featureDisplayName(f: FeatureData): string {
     : f.name;
 }
 
+/**
+ * Fakt „(model, cecha)” zużyty przez KTÓRYKOLWIEK wariant pytania o cechę
+ * (f: = TAK/NIE, f4: = ABCD) — twin pary nie wraca w tej samej sesji.
+ */
+function cellUsed(state: GenState, modelId: string, featureId: string): boolean {
+  return (
+    state.usedKeys.has(`f:${modelId}:${featureId}`) ||
+    state.usedKeys.has(`f4:${modelId}:${featureId}`)
+  );
+}
+
+/** Etykieta cechy jako opcja odpowiedzi (mianownik, bez sufiksu grupy). */
+function featureOptionLabel(f: FeatureData, kind: FeatureKind): string {
+  return kind === "dekor"
+    ? featureDisplayName(f)
+    : (technicalCopy(f.name)?.label ?? f.name);
+}
+
+/**
+ * Wariant ABCD: „która z tych cech występuje w modelu?” — poprawna to cecha
+ * z jawnym TAK, dystraktory to 3 cechy z JAWNYM NIE dla tego modelu (ten sam
+ * rodzaj). null, gdy brak modelu z kompletem dystraktorów → fallback TAK/NIE.
+ */
+function genFeaturePick(
+  snapshot: CatalogSnapshot,
+  state: GenState,
+  rng: Rng,
+  cells: ModelFeatureCell[],
+  kind: FeatureKind,
+  modelById: Map<string, DoorModelData>,
+  featureById: Map<string, FeatureData>,
+  kindById: Map<string, FeatureKind>,
+): GeneratedQuestion | null {
+  const trueCells = cells.filter((c) => c.hasFeature);
+  if (trueCells.length === 0) return null;
+
+  // Cechy z jawnym NIE per model (kandydaci na dystraktory) — mogą się
+  // powtarzać między pytaniami, „zużywa się” tylko fakt poprawny.
+  const falseByModel = new Map<string, FeatureData[]>();
+  for (const c of snapshot.matrix) {
+    if (c.hasFeature || kindById.get(c.featureId) !== kind) continue;
+    const f = featureById.get(c.featureId);
+    if (!f) continue;
+    const list = falseByModel.get(c.modelId) ?? [];
+    list.push(f);
+    falseByModel.set(c.modelId, list);
+  }
+
+  const pool = trueCells.filter(
+    (c) => (falseByModel.get(c.modelId)?.length ?? 0) >= 3,
+  );
+  if (pool.length === 0) return null;
+
+  const shares = computeFeatureShares(snapshot);
+  const cell = weightedPick(rng, pool, (c) => {
+    const share = shares.get(c.featureId) ?? 0.5;
+    return share > 0.9 || share < 0.1 ? 0.35 : 1;
+  });
+  const model = modelById.get(cell.modelId)!;
+  const feature = featureById.get(cell.featureId)!;
+  const correctLabel = featureOptionLabel(feature, kind);
+
+  const seenLabels = new Set([correctLabel]);
+  const distractors: string[] = [];
+  for (const f of shuffle(rng, falseByModel.get(cell.modelId)!)) {
+    const label = featureOptionLabel(f, kind);
+    if (seenLabels.has(label)) continue;
+    seenLabels.add(label);
+    distractors.push(label);
+    if (distractors.length === 3) break;
+  }
+  if (distractors.length < 3) return null;
+
+  const correctIndex = leastUsedIndex(state, rng, 4);
+  const options: string[] = [];
+  let d = 0;
+  for (let i = 0; i < 4; i++) {
+    options.push(i === correctIndex ? correctLabel : distractors[d++]);
+  }
+  state.letterCounts[correctIndex] += 1;
+  state.usedKeys.add(`f4:${cell.modelId}:${cell.featureId}`);
+
+  const isDekor = kind === "dekor";
+  return {
+    qtype: "feature_yn",
+    dedupeKey: `f4:${cell.modelId}:${cell.featureId}`,
+    payload: {
+      qtype: "feature_yn",
+      prompt: isDekor
+        ? `W którym z poniższych dekorów występuje model ${model.name}?`
+        : `Która z poniższych cech występuje w skrzydle ${model.name}?`,
+      options,
+    },
+    correctAnswer: { index: correctIndex },
+    explanation: isDekor
+      ? `Model ${model.name} występuje w dekorze „${correctLabel}”; w pozostałych wymienionych — nie.`
+      : `Skrzydło ${model.name}: „${correctLabel}” — TAK, pozostałe wymienione — NIE.`,
+    imagePath: model.photoOriginalPath,
+    // próbka POPRAWNEGO dekoru zdradzałaby odpowiedź — tu tylko zdjęcie modelu
+    swatchPath: null,
+  };
+}
+
 function genFeature(
   snapshot: CatalogSnapshot,
   state: GenState,
@@ -158,7 +262,7 @@ function genFeature(
 
   let cells = snapshot.matrix.filter(
     (c) =>
-      !state.usedKeys.has(`f:${c.modelId}:${c.featureId}`) &&
+      !cellUsed(state, c.modelId, c.featureId) &&
       modelById.has(c.modelId) &&
       featureById.has(c.featureId),
   );
@@ -176,6 +280,15 @@ function genFeature(
   }
   cells = cells.filter((c) => kindById.get(c.featureId) === kind);
   if (cells.length === 0) return null;
+
+  // Wariant pytania 50/50: „która cecha?” (ABCD) albo TAK/NIE.
+  // ABCD bywa niewykonalny (model bez 3 cech z jawnym NIE) → fallback niżej.
+  if (chance(rng, 0.5)) {
+    const pick4 = genFeaturePick(
+      snapshot, state, rng, cells, kind, modelById, featureById, kindById,
+    );
+    if (pick4) return pick4;
+  }
 
   // Balans TAK/NIE: waga korygująca zależna od dotychczasowej przewagi.
   const diff = state.yesCount - state.noCount;
