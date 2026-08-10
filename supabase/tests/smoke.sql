@@ -112,10 +112,10 @@ begin
   assert (v_res->>'xp')::int = 0;
   assert (v_res->>'combo')::int = 0;
 
-  -- pytania 4-6 poprawnie (wolno — bez bonusu szybkości)
+  -- pytania 4-6 poprawnie (wolno — bez bonusu szybkości, ale w limicie 20+3 s)
   for i in 4..6 loop
     perform public.mark_question_served(v_uid, v_sid, i);
-    update public.session_questions set served_at = now() - interval '25 seconds'
+    update public.session_questions set served_at = now() - interval '22 seconds'
      where session_id = v_sid and seq = i;
   end loop;
   perform public.submit_answer(v_uid, v_sid, 4, '{"index":2}'::jsonb);
@@ -183,6 +183,47 @@ begin
   assert (select swatch_path from public.session_questions
            where session_id = v_sid and seq = 3) = 'dekory/bialy.jpg',
     'append_questions przenosi swatchPath';
+end $$;
+
+-- ------------------------------------------------------------------
+-- 3d. Limit czasu (0009): odpowiedź po limicie = błędna
+-- ------------------------------------------------------------------
+do $$
+declare
+  v_uid uuid := current_setting('test.uid')::uuid;
+  v_sid uuid;
+  v_res jsonb;
+begin
+  v_sid := public.create_session(
+    v_uid, 'learning', 'mix', null,
+    '[
+      {"seq":1,"qtype":"theory","dedupeKey":"tl1","payload":{},"correctAnswer":{"index":0},"explanation":null,"imagePath":null},
+      {"seq":2,"qtype":"theory","dedupeKey":"tl2","payload":{},"correctAnswer":{"index":1},"explanation":null,"imagePath":null},
+      {"seq":3,"qtype":"theory","dedupeKey":"tl3","payload":{},"correctAnswer":{"index":2},"explanation":null,"imagePath":null}
+    ]'::jsonb
+  );
+
+  -- 25 s > limit nauki (20+3) → poprawna treść, ale werdykt BŁĘDNA, xp=0
+  perform public.mark_question_served(v_uid, v_sid, 1);
+  update public.session_questions set served_at = now() - interval '25 seconds'
+   where session_id = v_sid and seq = 1;
+  v_res := public.submit_answer(v_uid, v_sid, 1, '{"index":0}'::jsonb);
+  assert not (v_res->>'correct')::boolean, 'po limicie ma być błędna';
+  assert (v_res->>'xp')::int = 0, 'po limicie zero XP';
+
+  -- 10 s → w limicie, poprawna
+  perform public.mark_question_served(v_uid, v_sid, 2);
+  update public.session_questions set served_at = now() - interval '10 seconds'
+   where session_id = v_sid and seq = 2;
+  v_res := public.submit_answer(v_uid, v_sid, 2, '{"index":1}'::jsonb);
+  assert (v_res->>'correct')::boolean, 'w limicie ma być poprawna';
+
+  -- auto-oddanie klienta {"timeout":true} → błędna
+  perform public.mark_question_served(v_uid, v_sid, 3);
+  update public.session_questions set served_at = now() - interval '21 seconds'
+   where session_id = v_sid and seq = 3;
+  v_res := public.submit_answer(v_uid, v_sid, 3, '{"timeout":true}'::jsonb);
+  assert not (v_res->>'correct')::boolean, 'timeout = błędna';
 end $$;
 
 -- ------------------------------------------------------------------

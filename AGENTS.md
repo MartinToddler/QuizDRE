@@ -18,8 +18,10 @@ Aplikacja quizowa do szkolenia z produktów DRE (drzwi). Język UI: polski.
    (`submit_answer`, `finish_session`) — transakcyjnie.
 2. **Formuły XP/rang/streaka istnieją w DWÓCH miejscach** i muszą być zgodne:
    `src/lib/engine/xp.ts` + `src/lib/engine/streak.ts` (wyświetlanie, testy)
-   oraz `supabase/migrations/0003/0004` (autorytatywne). Zmieniasz jedno —
-   zmień drugie i przetestuj `./scripts/db-test.sh`.
+   oraz `supabase/migrations/0003/0004` (autorytatywne). Tak samo limity
+   czasu odpowiedzi: `ANSWER_TIME_LIMIT_MS` w `src/lib/engine/types.ts`
+   ↔ `0009_time_limit.sql`. Zmieniasz jedno — zmień drugie i przetestuj
+   `./scripts/db-test.sh`.
 3. **`src/lib/engine` to czysty TS** — zero importów z Next/Supabase/React.
    Ma być przenośny do aplikacji Expo. Losowość tylko przez wstrzykiwany
    `Rng` (seedowany w testach i Quizie Dnia).

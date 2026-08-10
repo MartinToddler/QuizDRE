@@ -8,13 +8,13 @@ import {
 } from "@/lib/db/catalog";
 import { createAdminClient } from "@/lib/db/server";
 import {
+  CHALLENGE_BATCH_SIZE,
   challengeOverComment,
   composeChallengeBatch,
   composeDailyQuiz,
   composeLearningSession,
   newGenState,
   perfectComment,
-  pickComment,
   randomRng,
   seedFromString,
   mulberry32,
@@ -494,17 +494,20 @@ export interface AnswerResult {
   correct: boolean;
   correctAnswer: AnswerValue;
   explanation: string | null;
-  comment: string;
+  timeMs: number;
   xp: number;
   combo: number;
   milestoneBonus: number;
   sessionStatus: "active" | "finished";
   correctCount: number;
   answeredCount: number;
-  /** Dogenerowana partia wyzwania — klient dokleja do lokalnej listy. */
-  newQuestions: QuestionDto[];
 }
 
+/**
+ * Werdykt = JEDNO wywołanie SQL — minimalne opóźnienie. Komentarz
+ * narratora liczy klient (zna własną historię), a dogrywkę wyzwania
+ * pobiera osobnym żądaniem w tle (extendChallengeBatch).
+ */
 export async function submitAnswer(
   userId: string,
   sessionId: string,
@@ -521,75 +524,27 @@ export async function submitAnswer(
   });
   if (error) throw mapDbError(error.message);
 
-  const res = data as {
-    correct: boolean;
-    correctAnswer: AnswerValue;
-    explanation: string | null;
-    timeMs: number;
-    xp: number;
-    combo: number;
-    milestoneBonus: number;
-    sessionStatus: "active" | "finished";
-    correctCount: number;
-    answeredCount: number;
-  };
+  return data as AnswerResult;
+}
 
-  // Kontekst narratora + stan sesji — równolegle (mniej czekania na feedback).
-  const [{ data: lastAnswers }, session] = await Promise.all([
-    db
-      .from("session_questions")
-      .select("is_correct")
-      .eq("session_id", sessionId)
-      .not("answered_at", "is", null)
-      .order("seq", { ascending: false })
-      .limit(4),
-    getOwnedSession(db, userId, sessionId),
-  ]);
-  const previous = (lastAnswers ?? []).slice(1).map((r) => r.is_correct);
-  let wrongStreak = 0;
-  if (!res.correct) {
-    wrongStreak = 1;
-    for (const c of previous) {
-      if (c === false) wrongStreak += 1;
-      else break;
-    }
-  }
-  const comeback =
-    res.correct && previous.length >= 2 && !previous[0] && !previous[1];
+/**
+ * Dogrywka partii wyzwania na żądanie klienta (wołane w tle, z zapasem
+ * kilku pytań) — nie blokuje werdyktu odpowiedzi.
+ */
+export async function extendChallengeBatch(
+  userId: string,
+  sessionId: string,
+): Promise<QuestionDto[]> {
+  const db = admin();
+  const session = await getOwnedSession(db, userId, sessionId);
+  if (session.status !== "active" || session.mode !== "challenge") return [];
 
-  const comment = pickComment(randomRng(), {
-    correct: res.correct,
-    timeMs: res.timeMs,
-    combo: res.combo,
-    wrongStreak,
-    comeback,
-  });
+  const answered = session.correct_count + session.wrong_count;
+  if (session.question_count - answered >= CHALLENGE_BATCH_SIZE) return [];
 
-  // Wyzwanie: dogeneruj partię, gdy kończą się pytania; klient dostaje
-  // nowe payloady w tej samej odpowiedzi i dokleja je lokalnie.
-  let newQuestions: QuestionDto[] = [];
-  if (session.status === "active" && session.mode === "challenge") {
-    const answered = session.correct_count + session.wrong_count;
-    if (session.question_count - answered < 3) {
-      const prevCount = session.question_count;
-      await extendChallenge(db, userId, session);
-      newQuestions = await serveBatch(db, sessionId, prevCount + 1);
-    }
-  }
-
-  return {
-    correct: res.correct,
-    correctAnswer: res.correctAnswer,
-    explanation: res.explanation,
-    comment,
-    xp: res.xp,
-    combo: res.combo,
-    milestoneBonus: res.milestoneBonus,
-    sessionStatus: res.sessionStatus,
-    correctCount: res.correctCount,
-    answeredCount: res.answeredCount,
-    newQuestions,
-  };
+  const prevCount = session.question_count;
+  await extendChallenge(db, userId, session);
+  return serveBatch(db, sessionId, prevCount + 1);
 }
 
 /** Odtwarza stan generatora z bazy i dokłada partię pytań wyzwania. */

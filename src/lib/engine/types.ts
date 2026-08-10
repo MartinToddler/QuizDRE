@@ -10,6 +10,19 @@ export type QType = (typeof QTYPES)[number];
 export const MODES = ["learning", "challenge", "daily"] as const;
 export type Mode = (typeof MODES)[number];
 
+/**
+ * Limit czasu na odpowiedź (ms) — klient odlicza i auto-oddaje po czasie,
+ * a serwer EGZEKWUJE limit (+ zapas na sieć) w submit_answer.
+ * Duplikat w SQL: supabase/migrations/0009_time_limit.sql — zmieniasz
+ * jedno, zmień drugie (jak formuły XP).
+ */
+export const ANSWER_TIME_LIMIT_MS: Record<Mode, number> = {
+  learning: 20000,
+  daily: 20000,
+  challenge: 12000,
+};
+export const ANSWER_TIME_GRACE_MS = 3000;
+
 export const CATEGORIES = [
   "models",
   "technical",
@@ -64,10 +77,13 @@ export type QuestionPayload =
 /**
  * Odpowiedź — ten sam kształt po stronie klienta (given_answer)
  * i serwera (correct_answer); porównanie to równość jsonb w SQL.
+ * {timeout:true} = auto-oddanie po upływie limitu czasu (zawsze błędna,
+ * bo correct_answer nigdy nie ma tej postaci).
  */
 export const answerValueSchema = z.union([
   z.object({ value: z.enum(["TAK", "NIE", "LEWE", "PRAWE"]) }).strict(),
   z.object({ index: z.number().int().min(0).max(3) }).strict(),
+  z.object({ timeout: z.literal(true) }).strict(),
 ]);
 export type AnswerValue = z.infer<typeof answerValueSchema>;
 

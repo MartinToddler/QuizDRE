@@ -4,12 +4,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
-import type { AnswerValue, Category, Mode, QuestionPayload } from "@/lib/engine";
+import {
+  ANSWER_TIME_LIMIT_MS,
+  pickComment,
+  randomRng,
+  type AnswerValue,
+  type Category,
+  type Mode,
+  type QuestionPayload,
+} from "@/lib/engine";
 import { AnswerGrid } from "./answers";
 import { ResultScreen, type SessionSummary } from "./result";
 
@@ -36,14 +43,13 @@ interface AnswerResultDto {
   correct: boolean;
   correctAnswer: AnswerValue;
   explanation: string | null;
-  comment: string;
+  timeMs: number;
   xp: number;
   combo: number;
   milestoneBonus: number;
   sessionStatus: "active" | "finished";
   correctCount: number;
   answeredCount: number;
-  newQuestions: QuestionDto[];
 }
 
 type Phase =
@@ -87,15 +93,22 @@ export function QuizGame({
   const [idx, setIdx] = useState(0);
   const [selected, setSelected] = useState<AnswerValue | null>(null);
   const [feedback, setFeedback] = useState<AnswerResultDto | null>(null);
+  const [comment, setComment] = useState<string | null>(null);
   const [sessionXp, setSessionXp] = useState(0);
   const [score, setScore] = useState(0); // poprawne z rzędu (wyzwanie)
   const [total, setTotal] = useState(0); // pełna długość sesji (nauka)
   const [answeredBase, setAnsweredBase] = useState(0); // odpowiedziane przed wznowieniem
   const [resumed, setResumed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const limitMs = ANSWER_TIME_LIMIT_MS[mode];
+  const [remainingMs, setRemainingMs] = useState(limitMs);
   const startedRef = useRef(false);
   const autoNextRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const servedRef = useRef<Set<number>>(new Set());
+  // Historia poprawności — kontekst narratora (wrongStreak/comeback) liczony
+  // lokalnie, żeby serwer nie robił dodatkowych zapytań przy werdykcie.
+  const historyRef = useRef<boolean[]>([]);
+  const extendingRef = useRef(false);
   // Ref na listę pytań: timeout auto-przejścia w wyzwaniu musi widzieć
   // partie doklejone PO utworzeniu domknięcia (świeżą długość listy).
   const questionsRef = useRef<QuestionDto[]>([]);
@@ -183,22 +196,42 @@ export function QuizGame({
     }
   }, [phase.kind, idx, questions, markServed]);
 
-  // Feedback pojawia się pod odpowiedziami — na telefonie dociągamy go w kadr.
-  const feedbackRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (feedback) {
-      feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  // Dogrywka partii wyzwania — w tle, z zapasem; werdykt na nią nie czeka.
+  const extendQuestions = useCallback(async (): Promise<void> => {
+    if (!sessionId || extendingRef.current) return;
+    extendingRef.current = true;
+    try {
+      const res = await api<{ questions: QuestionDto[] }>(
+        `/api/quiz/sessions/${sessionId}/extend`,
+        { method: "POST" },
+      );
+      const known = new Set(questionsRef.current.map((q) => q.seq));
+      const fresh = res.questions.filter((q) => !known.has(q.seq));
+      if (fresh.length > 0) {
+        const merged = [...questionsRef.current, ...fresh];
+        questionsRef.current = merged; // od razu — advance() czyta ref
+        setQuestions(merged);
+      }
+    } catch {
+      // brak dogrywki ≠ błąd gry; advance spróbuje ponownie
+    } finally {
+      extendingRef.current = false;
     }
-  }, [feedback]);
+  }, [sessionId]);
 
   const advance = useCallback(
-    (res: AnswerResultDto) => {
+    async (res: AnswerResultDto) => {
       if (autoNextRef.current) {
         clearTimeout(autoNextRef.current);
         autoNextRef.current = null;
       }
-      const hasNext =
+      let hasNext =
         res.sessionStatus === "active" && idx + 1 < questionsRef.current.length;
+      if (!hasNext && res.sessionStatus === "active" && mode === "challenge") {
+        // dogrywka nie zdążyła — dociągnij i spróbuj jeszcze raz
+        await extendQuestions();
+        hasNext = idx + 1 < questionsRef.current.length;
+      }
       if (!hasNext) {
         setPhase({ kind: "loading" });
         if (sessionId) void finish(sessionId);
@@ -207,14 +240,19 @@ export function QuizGame({
       setIdx((i) => i + 1);
       setSelected(null);
       setFeedback(null);
+      setComment(null);
+      // uzupełnij bufor wyzwania zawczasu (nie blokuje przejścia)
+      if (mode === "challenge" && questionsRef.current.length - (idx + 2) < 4) {
+        void extendQuestions();
+      }
     },
-    [idx, sessionId, finish],
+    [idx, sessionId, finish, mode, extendQuestions],
   );
 
   async function answer(value: AnswerValue) {
     const question = questions[idx];
     if (!sessionId || !question || selected || busy) return;
-    setSelected(value);
+    setSelected(value); // otwiera bottom-sheet w stanie „sprawdzam…”
     setBusy(true);
     try {
       const res = await api<AnswerResultDto>(
@@ -224,18 +262,36 @@ export function QuizGame({
           body: JSON.stringify({ position: question.seq, answer: value }),
         },
       );
+      // Komentarz narratora liczony lokalnie — serwer zwraca sam werdykt.
+      const history = historyRef.current;
+      let wrongStreak = 0;
+      if (!res.correct) {
+        wrongStreak = 1;
+        for (let i = history.length - 1; i >= 0 && history[i] === false; i--) {
+          wrongStreak += 1;
+        }
+      }
+      const comeback =
+        res.correct &&
+        history.length >= 2 &&
+        !history[history.length - 1] &&
+        !history[history.length - 2];
+      history.push(res.correct);
+      setComment(
+        pickComment(randomRng(), {
+          correct: res.correct,
+          timeMs: res.timeMs,
+          combo: res.combo,
+          wrongStreak,
+          comeback,
+        }),
+      );
       setFeedback(res);
       setSessionXp((xp) => xp + res.xp);
       setScore(res.correctCount);
-      if (res.newQuestions.length > 0) {
-        setQuestions((prev) => {
-          const known = new Set(prev.map((q) => q.seq));
-          return [...prev, ...res.newQuestions.filter((q) => !known.has(q.seq))];
-        });
-      }
       // Wyzwanie: poprawna odpowiedź płynie dalej sama.
       if (mode === "challenge" && res.correct) {
-        autoNextRef.current = setTimeout(() => advance(res), 1000);
+        autoNextRef.current = setTimeout(() => void advance(res), 1000);
       }
     } catch (e) {
       const code = (e as Error).message;
@@ -248,6 +304,34 @@ export function QuizGame({
       setBusy(false);
     }
   }
+
+  // Zegar: limit czasu na pytanie; po upływie auto-oddanie {timeout:true}.
+  // Reset odliczania przy zmianie pytania — wzorzec „adjust podczas renderu”.
+  const [timerIdx, setTimerIdx] = useState(idx);
+  if (timerIdx !== idx) {
+    setTimerIdx(idx);
+    setRemainingMs(limitMs);
+  }
+  const answerRef = useRef<(v: AnswerValue) => void>(() => {});
+  useEffect(() => {
+    answerRef.current = (v) => void answer(v);
+  });
+  const answered = selected !== null;
+  useEffect(() => {
+    if (phase.kind !== "playing" || answered) return;
+    const deadline = Date.now() + limitMs;
+    const t = setInterval(() => {
+      const left = deadline - Date.now();
+      if (left <= 0) {
+        clearInterval(t);
+        setRemainingMs(0);
+        answerRef.current({ timeout: true });
+      } else {
+        setRemainingMs(left);
+      }
+    }, 100);
+    return () => clearInterval(t);
+  }, [phase.kind, idx, answered, limitMs]);
 
   async function exitGame() {
     if (mode === "challenge" && sessionId && phase.kind === "playing") {
@@ -344,6 +428,27 @@ export function QuizGame({
         </Chip>
       </div>
 
+      {/* limit czasu na odpowiedź */}
+      <div className="mt-3 flex items-center gap-2">
+        <Progress
+          value={remainingMs}
+          max={limitMs}
+          className="h-1.5 flex-1"
+          barClassName={cn(
+            "duration-100",
+            remainingMs <= 5000 ? "bg-red-500" : "bg-dre-300",
+          )}
+        />
+        <span
+          className={cn(
+            "w-8 shrink-0 text-right text-xs font-bold tabular-nums",
+            remainingMs <= 5000 ? "text-red-600" : "text-gray-400",
+          )}
+        >
+          {Math.ceil(remainingMs / 1000)}s
+        </span>
+      </div>
+
       {mode !== "challenge" && (
         <p className="mt-2 text-xs font-medium text-gray-400">
           Pytanie {answeredBase + idx + 1} z {total || questions.length}
@@ -400,49 +505,68 @@ export function QuizGame({
         />
       </div>
 
-      {/* feedback */}
-      {feedback && (
-        <Card
-          ref={feedbackRef}
-          className={cn(
-            "mt-4 animate-rise border-2",
-            feedback.correct ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50",
-          )}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className={cn("font-bold", feedback.correct ? "text-green-700" : "text-red-700")}>
-                {feedback.correct ? "Dobrze!" : "Niestety nie."}
-              </p>
-              <p className="mt-1 text-sm italic text-gray-600">{feedback.comment}</p>
-              {feedback.explanation && (
-                <p className="mt-2 text-sm text-gray-600">{feedback.explanation}</p>
-              )}
-              {feedback.milestoneBonus > 0 && (
-                <p className="mt-2 text-sm font-semibold text-dre-600">
-                  Kamień milowy! +{feedback.milestoneBonus} XP
-                </p>
-              )}
-            </div>
-            {feedback.correct && (
-              <span className="shrink-0 rounded-full bg-green-600 px-2.5 py-1 text-sm font-bold text-white">
-                +{feedback.xp} XP
-              </span>
+      {/* Bottom-sheet feedbacku: otwiera się NATYCHMIAST po odpowiedzi
+          („sprawdzam…”), werdykt wypełnia go po odpowiedzi serwera.
+          „Dalej” zawsze pod kciukiem — zero scrollowania na telefonie. */}
+      {selected && (
+        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/30">
+          <div className="w-full max-w-xl animate-slide-up rounded-t-3xl border-t border-gray-200 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl">
+            {!feedback ? (
+              <div className="flex items-center gap-3 py-3">
+                <Spinner />
+                <p className="font-semibold text-gray-500">Sprawdzam…</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <p
+                    className={cn(
+                      "text-lg font-black",
+                      feedback.correct ? "text-green-700" : "text-red-700",
+                    )}
+                  >
+                    {feedback.correct
+                      ? "✓ Dobrze!"
+                      : "timeout" in selected
+                        ? "⏱ Czas minął"
+                        : "✗ Niestety nie"}
+                  </p>
+                  {feedback.correct && (
+                    <span className="shrink-0 rounded-full bg-green-600 px-2.5 py-1 text-sm font-bold text-white">
+                      +{feedback.xp} XP
+                    </span>
+                  )}
+                </div>
+                {comment && (
+                  <p className="mt-1 text-sm italic text-gray-500">„{comment}”</p>
+                )}
+                {feedback.explanation && (
+                  <p className="mt-2 text-sm text-gray-600">{feedback.explanation}</p>
+                )}
+                {feedback.milestoneBonus > 0 && (
+                  <p className="mt-2 text-sm font-semibold text-dre-600">
+                    Kamień milowy! +{feedback.milestoneBonus} XP
+                  </p>
+                )}
+                {mode === "challenge" && feedback.correct ? (
+                  <p className="mt-3 text-center text-xs text-gray-400">
+                    następne pytanie za chwilę…
+                  </p>
+                ) : (
+                  <Button
+                    onClick={() => void advance(feedback)}
+                    className="mt-4 w-full"
+                    size="lg"
+                  >
+                    {feedback.sessionStatus === "finished" ||
+                    (mode !== "challenge" && idx + 1 >= questions.length)
+                      ? "Zobacz wynik"
+                      : "Dalej"}
+                  </Button>
+                )}
+              </>
             )}
           </div>
-          {!(mode === "challenge" && feedback.correct) && (
-            <Button onClick={() => advance(feedback)} className="mt-3 w-full" size="md">
-              {feedback.sessionStatus === "finished" || idx + 1 >= questions.length
-                ? "Zobacz wynik"
-                : "Dalej"}
-            </Button>
-          )}
-        </Card>
-      )}
-
-      {busy && !feedback && (
-        <div className="mt-4 flex justify-center">
-          <Spinner />
         </div>
       )}
     </div>

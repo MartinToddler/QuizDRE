@@ -36,7 +36,7 @@ Odpowiedzi, punktacja i czas liczone są wyłącznie server-side (funkcje SQL
 
 1. Załóż projekt na [supabase.com](https://supabase.com) (region EU).
 2. W **SQL Editor** wykonaj po kolei pliki z `supabase/migrations/`
-   (0001 → 0007), albo użyj CLI: `supabase db push`.
+   (0001 → 0009), albo użyj CLI: `supabase db push`.
 3. **Authentication → Providers**: włącz **Email** (na start możesz wyłączyć
    „Confirm email”). Logowanie **Google** skonfigurujesz w sekcji 4 —
    większość zrobi za Ciebie skrypt.
