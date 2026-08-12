@@ -347,7 +347,7 @@ export function QuizGame({
 
   if (phase.kind === "loading") {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
+      <div className="flex h-full flex-col items-center justify-center gap-3">
         <Spinner className="size-8" />
         <p className="text-sm text-gray-500">Przygotowuję pytania…</p>
       </div>
@@ -363,7 +363,7 @@ export function QuizGame({
         "Nowa wersja czeka na migrację bazy — wklej supabase/migrations/0007_dekory.sql w Supabase SQL Editor.",
     };
     return (
-      <div className="mx-auto max-w-sm py-16 text-center">
+      <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center text-center">
         <p className="text-4xl">🚪</p>
         <p className="mt-4 font-semibold">
           {messages[phase.code] ?? `Coś poszło nie tak (${phase.code}).`}
@@ -384,12 +384,15 @@ export function QuizGame({
         : mode === "challenge"
           ? `/quiz/gra?mode=challenge&po=${sessionId ?? ""}`
           : "/";
+    // Wynik to lista kart — tu przewijanie jest naturalne.
     return (
-      <ResultScreen
-        summary={phase.summary}
-        comment={phase.comment}
-        playAgainHref={againHref}
-      />
+      <div className="h-full overflow-y-auto">
+        <ResultScreen
+          summary={phase.summary}
+          comment={phase.comment}
+          playAgainHref={againHref}
+        />
+      </div>
     );
   }
 
@@ -398,26 +401,33 @@ export function QuizGame({
   const answeredCount = feedback?.answeredCount ?? answeredBase + idx;
   const correctCount = feedback?.correctCount ?? score;
 
+  const totalQuestions = total || questions.length;
+
   return (
-    <div className="mx-auto max-w-xl">
+    // Kolumna na pełną wysokość: nagłówek/pytanie/odpowiedzi mają stałą
+    // wysokość, obrazek dostaje resztę miejsca — nic się nie przewija.
+    <div className="mx-auto flex h-full w-full max-w-xl flex-col">
       {/* nagłówek gry */}
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2">
         <button
           onClick={exitGame}
           aria-label="Zakończ grę"
-          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="-ml-1 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
         >
           ✕
         </button>
         {mode === "challenge" ? (
-          <div className="flex flex-1 items-center gap-2">
-            <span className="text-lg">⚡</span>
-            <span className="text-lg font-black text-dre-600">{correctCount}</span>
-            <span className="text-sm text-gray-400">z rzędu</span>
+          <div className="flex flex-1 items-center gap-1.5">
+            <span>⚡</span>
+            <span className="font-black text-dre-600">{correctCount}</span>
+            <span className="text-xs text-gray-400">z rzędu</span>
           </div>
         ) : (
-          <div className="flex-1">
-            <Progress value={answeredCount} max={total || questions.length} />
+          <div className="flex flex-1 items-center gap-2">
+            <Progress value={answeredCount} max={totalQuestions} className="h-2 flex-1" />
+            <span className="shrink-0 text-xs font-semibold tabular-nums text-gray-400">
+              {Math.min(answeredBase + idx + 1, totalQuestions)}/{totalQuestions}
+            </span>
           </div>
         )}
         {feedback && feedback.combo >= 2 && (
@@ -429,7 +439,7 @@ export function QuizGame({
       </div>
 
       {/* limit czasu na odpowiedź */}
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-2 flex shrink-0 items-center gap-2">
         <Progress
           value={remainingMs}
           max={limitMs}
@@ -449,43 +459,38 @@ export function QuizGame({
         </span>
       </div>
 
-      {mode !== "challenge" && (
-        <p className="mt-2 text-xs font-medium text-gray-400">
-          Pytanie {answeredBase + idx + 1} z {total || questions.length}
-        </p>
-      )}
-
       {resumed && idx === 0 && !feedback && (
-        <p className="mt-2 inline-block rounded-lg bg-dre-50 px-3 py-1.5 text-xs font-medium text-dre-700">
+        <p className="mt-2 shrink-0 rounded-lg bg-dre-50 px-3 py-1.5 text-xs font-medium text-dre-700">
           ↻ Wznowiono przerwaną sesję — gramy od miejsca, w którym stanęło.
         </p>
       )}
 
       {/* pytanie */}
-      <h1 className="mt-4 text-xl font-bold leading-snug">{question.payload.prompt}</h1>
+      <h1 className="mt-3 shrink-0 text-lg font-bold leading-snug sm:text-xl">
+        {question.payload.prompt}
+      </h1>
 
-      {(question.imageUrl || question.swatchUrl) && (
-        <div className="mt-4 flex items-center justify-center gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-3">
+      {/* Elastyczna strefa: obrazek kurczy się do wolnego miejsca,
+          bez obrazka zostaje pustym odstępem dociskającym odpowiedzi. */}
+      {question.imageUrl || question.swatchUrl ? (
+        <div className="mt-3 flex min-h-0 flex-1 items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-2">
           {/* Zdjęcia z prywatnego bucketu (signed URL) — bez next/image */}
           {question.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={question.imageUrl}
               alt="Drzwi — spójrz uważnie"
-              className={cn(
-                "rounded-lg object-contain",
-                question.swatchUrl ? "max-h-64" : "max-h-80",
-              )}
+              className="max-h-full min-h-0 max-w-full rounded-lg object-contain"
               draggable={false}
             />
           )}
           {question.swatchUrl && (
-            <figure className="shrink-0 text-center">
+            <figure className="flex max-h-full shrink-0 flex-col items-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={question.swatchUrl}
                 alt="Próbka dekoru"
-                className="size-24 rounded-lg border border-gray-200 object-cover shadow-sm"
+                className="size-16 rounded-lg border border-gray-200 object-cover shadow-sm sm:size-20"
                 draggable={false}
               />
               <figcaption className="mt-1 text-[11px] font-medium text-gray-400">
@@ -494,9 +499,11 @@ export function QuizGame({
             </figure>
           )}
         </div>
+      ) : (
+        <div className="min-h-2 flex-1" />
       )}
 
-      <div className="mt-5">
+      <div className="shrink-0 pb-1 pt-3">
         <AnswerGrid
           payload={question.payload}
           selected={selected}

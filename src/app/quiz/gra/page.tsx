@@ -44,7 +44,10 @@ export default async function GamePage({
     params.sesja && UUID_RE.test(params.sesja) ? params.sesja : undefined;
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-6">
+    // Gra mieści się w wysokości okna (dvh — pasek adresu nie ucina dołu):
+    // nic się nie przewija, elastyczny jest tylko obrazek pytania.
+    // pb: zapas na dolny pasek systemowy w trybie PWA (iOS home indicator).
+    <main className="h-dvh overflow-hidden bg-gray-50 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       {/* key: zmiana parametrów (np. „Jeszcze raz” bez `sesja`) = świeży montaż gry */}
       <QuizGame
         key={`${mode}|${categories?.join(",") ?? ""}|${resumeSessionId ?? ""}|${params.po ?? ""}`}
