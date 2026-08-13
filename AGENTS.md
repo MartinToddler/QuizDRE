@@ -2,6 +2,10 @@
 
 Aplikacja quizowa do szkolenia z produktów DRE (drzwi). Język UI: polski.
 
+> **Nowy w projekcie?** Zacznij od `CLAUDE.md`, potem `docs/README.md`
+> (mapa całej dokumentacji: produkt, architektura, model danych, przepływy,
+> status, dług techniczny). Ten plik jest zwięzłym skrótem zasad krytycznych.
+
 ## Komendy
 
 - `npm run dev` / `npm run build` (prebuild generuje ikony PWA)
