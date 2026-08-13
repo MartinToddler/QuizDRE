@@ -47,6 +47,12 @@ Aplikacja quizowa do szkolenia z produktów DRE (drzwi). Język UI: polski.
    panelu admina. Panel: `/admin` — KAŻDA strona gate'owana
    `requireAdminPage()`, server actions `assertAdmin()`
    (`src/lib/admin-guard.ts`).
+8. Proporcje pytań są GLOBALNE: `app_settings.question_mix` (0010, tabela
+   tylko dla service role) → `getQuestionMix()` w `src/lib/db/settings.ts`,
+   panel `/admin/proporcje`. Silnik dostaje je parametrem `mix` w
+   `composeLearningSession`/`composeChallengeBatch`/`composeDailyQuiz`
+   (fallback `DEFAULT_QUESTION_MIX`); waga 0 = kategoria poza losowaniem,
+   ale jawny wybór kategorii w nauce ma pierwszeństwo.
 
 ## Wgrywanie danych
 

@@ -436,4 +436,36 @@ begin
 end $$;
 reset role;
 
+-- ------------------------------------------------------------------
+-- 10. Ustawienia globalne (0010): zapis/odczyt service role, RLS
+-- ------------------------------------------------------------------
+do $$
+begin
+  assert (select value from public.app_settings where key = 'question_mix')
+         ? 'technical',
+    'seed question_mix zawiera wagi kategorii';
+
+  update public.app_settings
+     set value = '{"models":10,"technical":50,"dekory":0,"left_right":20,"theory":20}'::jsonb
+   where key = 'question_mix';
+  assert (select (value->>'technical')::int from public.app_settings
+           where key = 'question_mix') = 50,
+    'service role może zmienić proporcje';
+end $$;
+
+-- klient nie widzi ustawień (RLS bez polityk) i nie może ich zmienić
+select set_config('request.jwt.claim.sub', current_setting('test.uid'), false);
+set role authenticated;
+do $$
+begin
+  assert (select count(*) from public.app_settings) = 0,
+    'app_settings MUSI być niewidoczne dla klienta';
+  begin
+    insert into public.app_settings (key, value) values ('x', '{}'::jsonb);
+    raise exception 'oczekiwano odmowy zapisu do app_settings';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
 select 'SMOKE TEST OK' as result;

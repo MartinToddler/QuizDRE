@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/cn";
+import { isAdmin } from "@/lib/db/roles";
+import { getSessionUser } from "@/lib/db/server";
 
 type NavKey = "home" | "quiz" | "ranking" | "profil";
 
@@ -12,13 +14,17 @@ const NAV: { key: NavKey; href: string; label: string; icon: string }[] = [
 ];
 
 /** Layout aplikacji: górny pasek + dolna nawigacja mobilna. */
-export function AppShell({
+export async function AppShell({
   children,
   active,
 }: {
   children: React.ReactNode;
   active: NavKey;
 }) {
+  // Skrót do panelu dla adminów; odczyty są cache'owane per żądanie.
+  const user = await getSessionUser();
+  const admin = user ? await isAdmin(user.id) : false;
+
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
       <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/90 backdrop-blur">
@@ -42,13 +48,25 @@ export function AppShell({
               </Link>
             ))}
           </nav>
-          <Link
-            href="/ustawienia"
-            aria-label="Ustawienia"
-            className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
-          >
-            ⚙️
-          </Link>
+          <div className="flex items-center gap-0.5">
+            {admin && (
+              <Link
+                href="/admin"
+                aria-label="Panel admina"
+                title="Panel admina"
+                className="rounded-lg p-2 hover:bg-dre-50"
+              >
+                🛡️
+              </Link>
+            )}
+            <Link
+              href="/ustawienia"
+              aria-label="Ustawienia"
+              className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
+            >
+              ⚙️
+            </Link>
+          </div>
         </div>
         <div className="h-0.5 bg-gradient-to-r from-dre-500 via-dre-400 to-dre-500" />
       </header>

@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 
 const TABS = [
   { href: "/admin/pytania", label: "Pytania" },
+  { href: "/admin/proporcje", label: "Proporcje" },
   { href: "/admin/uzytkownicy", label: "Użytkownicy" },
 ];
 

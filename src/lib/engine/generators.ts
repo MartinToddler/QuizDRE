@@ -2,6 +2,7 @@ import { technicalCopy } from "./feature-copy";
 import { chance, pick, randInt, shuffle, weightedPick, type Rng } from "./rng";
 import {
   CATEGORY_TO_QTYPE,
+  DEFAULT_QUESTION_MIX,
   featureKind,
   flipOrientation,
   type CatalogSnapshot,
@@ -12,6 +13,7 @@ import {
   type GeneratedQuestion,
   type ModelFeatureCell,
   type QType,
+  type QuestionMix,
 } from "./types";
 
 /** Opcje generacji — na razie tylko zawężenie cech do techniki albo dekorów. */
@@ -23,18 +25,7 @@ export interface GenerateOptions {
 export const MIN_POOL_FOR_TYPE = 8;
 export const LEARNING_SESSION_SIZE = 20;
 export const CHALLENGE_BATCH_SIZE = 10;
-export const DAILY_QUIZ_TEMPLATE: readonly QType[] = [
-  "theory",
-  "theory",
-  "theory",
-  "feature_yn",
-  "feature_yn",
-  "feature_yn",
-  "model_guess",
-  "model_guess",
-  "left_right",
-  "left_right",
-];
+export const DAILY_QUIZ_SIZE = 10;
 
 export const ORIENTATION_EXPLANATION =
   "Zasada: patrzysz na drzwi od strony, na którą się otwierają (widzisz zawiasy). " +
@@ -510,20 +501,6 @@ export function generateQuestion(
 /* Kompozycja sesji                                                    */
 /* ------------------------------------------------------------------ */
 
-function generateOfTypes(
-  types: readonly QType[],
-  snapshot: CatalogSnapshot,
-  state: GenState,
-  rng: Rng,
-): GeneratedQuestion[] {
-  const out: GeneratedQuestion[] = [];
-  for (const t of types) {
-    const q = generateQuestion(t, snapshot, state, rng);
-    if (q) out.push(q);
-  }
-  return out;
-}
-
 /** Zawężenie cech dla kategorii nauki (technika vs dekory). */
 function categoryOptions(category: Category): GenerateOptions | undefined {
   if (category === "technical") return { featureKind: "technical" };
@@ -531,23 +508,26 @@ function categoryOptions(category: Category): GenerateOptions | undefined {
   return undefined;
 }
 
-interface LearningUnit {
+/** Jednostka losowania: kategoria → typ pytania + zawężenie + pula + waga. */
+interface MixUnit {
+  category: Exclude<Category, "mix">;
   qtype: QType;
   opts: GenerateOptions | undefined;
   available: number;
+  weight: number;
 }
 
 /**
- * Sesja trybu nauki: 20 pytań z WYBRANYCH kategorii (jedna, kilka lub
- * wszystkie), rozdzielonych po równo i przetasowanych. Pusta lista albo
- * „mix” = wszystkie kategorie. Mniejsze pule → mniej pytań.
+ * Jednostki do losowania: kategorie z niepustą pulą, z wagami z globalnych
+ * proporcji (app_settings.question_mix — panel admina). Waga 0 wyklucza
+ * kategorię; gdy wszystkie wybrane mają 0 (albo brak wag), wagi są równe,
+ * żeby wybór użytkownika w trybie nauki zawsze coś dał.
  */
-export function composeLearningSession(
+function buildUnits(
   snapshot: CatalogSnapshot,
   categories: readonly Category[],
-  state: GenState,
-  rng: Rng,
-): GeneratedQuestion[] {
+  mix: QuestionMix,
+): MixUnit[] {
   const all = Object.keys(CATEGORY_TO_QTYPE) as Exclude<Category, "mix">[];
   const picked =
     categories.length === 0 || categories.includes("mix")
@@ -556,8 +536,9 @@ export function composeLearningSession(
 
   const kinds = featureKindAvailability(snapshot);
   const types = typeAvailability(snapshot);
-  const units: LearningUnit[] = picked
+  const units = picked
     .map((c) => ({
+      category: c,
       qtype: CATEGORY_TO_QTYPE[c],
       opts: categoryOptions(c),
       available:
@@ -566,31 +547,92 @@ export function composeLearningSession(
           : c === "dekory"
             ? kinds.dekor
             : types[CATEGORY_TO_QTYPE[c]],
+      weight: Math.max(0, mix[c] ?? 0),
     }))
     .filter((u) => u.available > 0);
+
+  const withWeight = units.filter((u) => u.weight > 0);
+  if (withWeight.length > 0) return withWeight;
+  return units.map((u) => ({ ...u, weight: 1 }));
+}
+
+/**
+ * Podział `wanted` pytań między jednostki proporcjonalnie do wag
+ * (metoda największych reszt), przycięty pojemnością puli; nadwyżka
+ * z przyciętych jednostek wraca do tych, które mają jeszcze zapas.
+ */
+function allocateSlots(units: MixUnit[], wanted: number): Map<MixUnit, number> {
+  const totalWeight = units.reduce((n, u) => n + u.weight, 0);
+  const slots = new Map<MixUnit, number>();
+  if (totalWeight === 0 || wanted <= 0) return slots;
+
+  const exact = units.map((u) => ({ u, ideal: (wanted * u.weight) / totalWeight }));
+  for (const { u, ideal } of exact) {
+    slots.set(u, Math.min(u.available, Math.floor(ideal)));
+  }
+
+  // Reszty: kolejność wg części dziesiętnej (największa reszta pierwsza).
+  const rest = [...exact].sort(
+    (a, b) => (b.ideal % 1) - (a.ideal % 1) || b.u.weight - a.u.weight,
+  );
+  let assigned = [...slots.values()].reduce((n, v) => n + v, 0);
+  for (const { u } of rest) {
+    if (assigned >= wanted) break;
+    if ((slots.get(u) ?? 0) < u.available) {
+      slots.set(u, (slots.get(u) ?? 0) + 1);
+      assigned += 1;
+    }
+  }
+  // Redystrybucja nadwyżki po przycięciu pojemnością.
+  while (assigned < wanted) {
+    const room = units.filter((u) => (slots.get(u) ?? 0) < u.available);
+    if (room.length === 0) break;
+    for (const u of room) {
+      if (assigned >= wanted) break;
+      slots.set(u, (slots.get(u) ?? 0) + 1);
+      assigned += 1;
+    }
+  }
+  return slots;
+}
+
+/**
+ * Sesja trybu nauki: 20 pytań z WYBRANYCH kategorii (jedna, kilka lub
+ * wszystkie), rozdzielonych zgodnie z globalnymi proporcjami i przetasowanych.
+ * Pusta lista albo „mix” = wszystkie kategorie. Mniejsze pule → mniej pytań.
+ */
+export function composeLearningSession(
+  snapshot: CatalogSnapshot,
+  categories: readonly Category[],
+  state: GenState,
+  rng: Rng,
+  mix: QuestionMix = DEFAULT_QUESTION_MIX,
+): GeneratedQuestion[] {
+  const units = buildUnits(snapshot, categories, mix);
   if (units.length === 0) return [];
 
   const wanted = Math.min(
     LEARNING_SESSION_SIZE,
     units.reduce((n, u) => n + u.available, 0),
   );
+  const slots = allocateSlots(units, wanted);
 
-  const perUnit = Math.ceil(wanted / units.length);
   const plan = shuffle(
     rng,
-    units.flatMap((u) => Array<LearningUnit>(perUnit).fill(u)),
-  ).slice(0, wanted);
+    units.flatMap((u) => Array<MixUnit>(slots.get(u) ?? 0).fill(u)),
+  );
 
   const out: GeneratedQuestion[] = [];
   for (const u of plan) {
     const q = generateQuestion(u.qtype, snapshot, state, rng, u.opts);
     if (q) out.push(q);
   }
-  // Dopełnienie round-robin — plan mógł trafić w wyczerpane pule.
+  // Dopełnienie — plan mógł trafić w wyczerpane pule (kolejność wg wag).
+  const byWeight = [...units].sort((a, b) => b.weight - a.weight);
   let stalled = false;
   while (out.length < wanted && !stalled) {
     stalled = true;
-    for (const u of units) {
+    for (const u of byWeight) {
       if (out.length >= wanted) break;
       const q = generateQuestion(u.qtype, snapshot, state, rng, u.opts);
       if (q) {
@@ -603,25 +645,30 @@ export function composeLearningSession(
 }
 
 /**
- * Partia pytań wyzwania (mix, długość nieograniczona).
- * Po wyczerpaniu puli dedupe jest zerowane — bardzo długie runy mogą
- * zobaczyć pytanie ponownie, ale gra się nie kończy z braku pytań.
+ * Partia pytań wyzwania (mix, długość nieograniczona) — typ każdego pytania
+ * losowany zgodnie z globalnymi proporcjami. Po wyczerpaniu puli dedupe jest
+ * zerowane: bardzo długie runy mogą zobaczyć pytanie ponownie, ale gra się
+ * nie kończy z braku pytań.
  */
 export function composeChallengeBatch(
   snapshot: CatalogSnapshot,
   state: GenState,
   rng: Rng,
   count = CHALLENGE_BATCH_SIZE,
+  mix: QuestionMix = DEFAULT_QUESTION_MIX,
 ): GeneratedQuestion[] {
-  const types = availableTypes(snapshot);
-  if (types.length === 0) return [];
+  const units = buildUnits(snapshot, ["mix"], mix);
+  if (units.length === 0) return [];
+
   const out: GeneratedQuestion[] = [];
   let exhaustionResets = 0;
   while (out.length < count) {
-    const order = shuffle(rng, types);
+    const first = weightedPick(rng, units, (u) => u.weight);
+    // Wylosowana kategoria najpierw; gdy jej pula wyczerpana — pozostałe.
+    const order = [first, ...shuffle(rng, units).filter((u) => u !== first)];
     let generated: GeneratedQuestion | null = null;
-    for (const t of order) {
-      generated = generateQuestion(t, snapshot, state, rng);
+    for (const u of order) {
+      generated = generateQuestion(u.qtype, snapshot, state, rng, u.opts);
       if (generated) break;
     }
     if (!generated) {
@@ -635,22 +682,43 @@ export function composeChallengeBatch(
   return out;
 }
 
-/** Zestaw Quizu Dnia: 3 teoria / 3 cechy / 2 model / 2 lewe-prawe. */
+/** Zestaw Quizu Dnia: 10 pytań wg globalnych proporcji (deterministycznie). */
 export function composeDailyQuiz(
   snapshot: CatalogSnapshot,
   state: GenState,
   rng: Rng,
+  mix: QuestionMix = DEFAULT_QUESTION_MIX,
 ): GeneratedQuestion[] {
-  const avail = typeAvailability(snapshot);
-  const plan = DAILY_QUIZ_TEMPLATE.filter((t) => avail[t] >= MIN_POOL_FOR_TYPE);
-  const out = generateOfTypes(plan, snapshot, state, rng);
+  const units = buildUnits(snapshot, ["mix"], mix);
+  if (units.length === 0) return [];
 
-  // Uzupełnij braki dowolnym dostępnym typem.
-  const types = availableTypes(snapshot);
-  while (out.length < DAILY_QUIZ_TEMPLATE.length && types.length > 0) {
-    const q = generateQuestion(pick(rng, types), snapshot, state, rng);
-    if (!q) break;
-    out.push(q);
+  const wanted = Math.min(
+    DAILY_QUIZ_SIZE,
+    units.reduce((n, u) => n + u.available, 0),
+  );
+  const slots = allocateSlots(units, wanted);
+  const plan = shuffle(
+    rng,
+    units.flatMap((u) => Array<MixUnit>(slots.get(u) ?? 0).fill(u)),
+  );
+
+  const out: GeneratedQuestion[] = [];
+  for (const u of plan) {
+    const q = generateQuestion(u.qtype, snapshot, state, rng, u.opts);
+    if (q) out.push(q);
   }
-  return shuffle(rng, out);
+  // Dopełnienie braków dowolną kategorią z zapasem.
+  let stalled = false;
+  while (out.length < wanted && !stalled) {
+    stalled = true;
+    for (const u of units) {
+      if (out.length >= wanted) break;
+      const q = generateQuestion(u.qtype, snapshot, state, rng, u.opts);
+      if (q) {
+        out.push(q);
+        stalled = false;
+      }
+    }
+  }
+  return out;
 }

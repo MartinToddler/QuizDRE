@@ -1,13 +1,15 @@
 import "server-only";
+import { cache } from "react";
 import { createAdminClient } from "@/lib/db/server";
 
 /**
  * Role użytkownika. Rola „user” jest NIEJAWNA (ma ją każdy zalogowany) —
  * user_roles przechowuje wyłącznie role podwyższone (np. „admin”).
  * Źródłem prawdy jest baza (świeży odczyt service role), nie JWT —
- * odebranie roli działa od następnego żądania.
+ * odebranie roli działa od następnego żądania. `cache()` scala powtórzone
+ * pytania w obrębie jednego żądania (strona + AppShell).
  */
-export async function getUserRoles(userId: string): Promise<Set<string>> {
+export const getUserRoles = cache(async (userId: string): Promise<Set<string>> => {
   const db = createAdminClient();
   if (!db) return new Set();
   const { data, error } = await db
@@ -17,7 +19,7 @@ export async function getUserRoles(userId: string): Promise<Set<string>> {
   // 42P01 = brak tabeli (okno przed migracją 0008) → brak ról podwyższonych
   if (error) return new Set();
   return new Set((data ?? []).map((r) => r.role as string));
-}
+});
 
 export async function isAdmin(userId: string): Promise<boolean> {
   return (await getUserRoles(userId)).has("admin");

@@ -50,6 +50,35 @@ export const CATEGORY_TO_QTYPE: Record<Exclude<Category, "mix">, QType> = {
  */
 export type FeatureKind = "technical" | "dekor";
 
+/* ------------------------------------------------------------------ */
+/* Globalne proporcje pytań (app_settings.question_mix, panel admina)  */
+/* ------------------------------------------------------------------ */
+
+/** Wagi RELATYWNE kategorii (0–100); 0 = kategoria poza losowaniem. */
+export type QuestionMix = Record<Exclude<Category, "mix">, number>;
+
+/** Domyślne proporcje — mniej dekorów, więcej techniki. */
+export const DEFAULT_QUESTION_MIX: QuestionMix = {
+  models: 20,
+  technical: 35,
+  dekory: 10,
+  left_right: 15,
+  theory: 20,
+};
+
+export const questionMixSchema = z
+  .object({
+    models: z.coerce.number().int().min(0).max(100),
+    technical: z.coerce.number().int().min(0).max(100),
+    dekory: z.coerce.number().int().min(0).max(100),
+    left_right: z.coerce.number().int().min(0).max(100),
+    theory: z.coerce.number().int().min(0).max(100),
+  })
+  .refine(
+    (m) => Object.values(m).some((w) => w > 0),
+    "Przynajmniej jedna kategoria musi mieć wagę większą od zera",
+  );
+
 export function featureKind(category: string | null): FeatureKind | null {
   if (category === null) return "technical"; // dane seedowe bez kategorii
   const c = category.trim().toLowerCase();

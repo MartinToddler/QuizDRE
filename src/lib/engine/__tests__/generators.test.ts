@@ -10,7 +10,7 @@ import {
   typeAvailability,
 } from "../generators";
 import { mulberry32 } from "../rng";
-import { featureKind, flipOrientation } from "../types";
+import { DEFAULT_QUESTION_MIX, featureKind, flipOrientation } from "../types";
 import { makeSnapshot } from "./fixtures";
 
 describe("dostępność typów", () => {
@@ -423,19 +423,131 @@ describe("kompozycja sesji", () => {
     expect(total).toHaveLength(300); // pula ~162 → reset dedupe zadziałał
   });
 
-  it("Quiz Dnia: 10 pytań wg szablonu i deterministyczny przy tym samym seedzie", () => {
+  it("Quiz Dnia: 10 pytań wg proporcji i deterministyczny przy tym samym seedzie", () => {
     const snap = makeSnapshot();
     const a = composeDailyQuiz(snap, newGenState(), mulberry32(20260807));
     const b = composeDailyQuiz(snap, newGenState(), mulberry32(20260807));
     expect(a).toHaveLength(10);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    // domyślne wagi: technika 35, modele 20, teoria 20, lewe/prawe 15, dekory 10
     const byType = a.reduce<Record<string, number>>((acc, q) => {
       acc[q.qtype] = (acc[q.qtype] ?? 0) + 1;
       return acc;
     }, {});
-    expect(byType.theory).toBe(3);
-    expect(byType.feature_yn).toBe(3);
+    expect(byType.feature_yn).toBe(5); // technika 3.5 + dekory 1 → 4-5 pozycji
     expect(byType.model_guess).toBe(2);
-    expect(byType.left_right).toBe(2);
+    expect(byType.theory).toBe(2);
+    expect(byType.left_right).toBe(1);
+  });
+
+  it("Quiz Dnia respektuje wyłączoną kategorię (waga 0)", () => {
+    const snap = makeSnapshot();
+    const quiz = composeDailyQuiz(snap, newGenState(), mulberry32(7), {
+      ...DEFAULT_QUESTION_MIX,
+      theory: 0,
+    });
+    expect(quiz).toHaveLength(10);
+    expect(quiz.some((q) => q.qtype === "theory")).toBe(false);
+  });
+});
+
+describe("globalne proporcje pytań (question_mix)", () => {
+  const TECH_IDS = new Set(["feat-1", "feat-2", "feat-3", "feat-4", "feat-5"]);
+  const count = (qs: { qtype: string; dedupeKey: string }[]) => ({
+    dekory: qs.filter(
+      (q) => q.qtype === "feature_yn" && !TECH_IDS.has(q.dedupeKey.split(":")[2]),
+    ).length,
+    technical: qs.filter(
+      (q) => q.qtype === "feature_yn" && TECH_IDS.has(q.dedupeKey.split(":")[2]),
+    ).length,
+    theory: qs.filter((q) => q.qtype === "theory").length,
+  });
+
+  it("domyślne wagi: techniki wyraźnie więcej niż dekorów", () => {
+    const snap = makeSnapshot();
+    const session = composeLearningSession(
+      snap,
+      ["mix"],
+      newGenState(),
+      mulberry32(31),
+    );
+    const c = count(session);
+    expect(session).toHaveLength(20);
+    expect(c.technical).toBeGreaterThan(c.dekory * 2);
+    expect(c.dekory).toBeLessThanOrEqual(3);
+  });
+
+  it("waga 0 wyłącza kategorię z mixu, ale nie z jawnego wyboru", () => {
+    const snap = makeSnapshot();
+    const noDekory = { ...DEFAULT_QUESTION_MIX, dekory: 0 };
+    const mixSession = composeLearningSession(
+      snap,
+      ["mix"],
+      newGenState(),
+      mulberry32(5),
+      noDekory,
+    );
+    expect(count(mixSession).dekory).toBe(0);
+    expect(mixSession).toHaveLength(20);
+
+    // użytkownik wybiera „Dekory” wprost — dostaje pytania mimo wagi 0
+    const explicit = composeLearningSession(
+      snap,
+      ["dekory"],
+      newGenState(),
+      mulberry32(5),
+      noDekory,
+    );
+    expect(explicit).toHaveLength(20);
+    expect(count(explicit).dekory).toBe(20);
+  });
+
+  it("proporcje przenoszą się na partie wyzwania", () => {
+    const snap = makeSnapshot();
+    const onlyTheory = {
+      models: 0,
+      technical: 0,
+      dekory: 0,
+      left_right: 0,
+      theory: 100,
+    };
+    const batch = composeChallengeBatch(
+      snap,
+      newGenState(),
+      mulberry32(11),
+      CHALLENGE_BATCH_SIZE,
+      onlyTheory,
+    );
+    expect(batch).toHaveLength(CHALLENGE_BATCH_SIZE);
+    expect(batch.every((q) => q.qtype === "theory")).toBe(true);
+  });
+
+  it("nadwyżkę po wyczerpaniu puli biorą pozostałe WŁĄCZONE kategorie", () => {
+    const snap = makeSnapshot();
+    // lewe/prawe ma tylko 12 pozycji przy wadze 95 — resztę dobiera teoria
+    const session = composeLearningSession(snap, ["mix"], newGenState(), mulberry32(2), {
+      models: 0,
+      technical: 0,
+      dekory: 0,
+      left_right: 95,
+      theory: 5,
+    });
+    expect(session).toHaveLength(20);
+    expect(session.filter((q) => q.qtype === "left_right")).toHaveLength(12);
+    expect(session.filter((q) => q.qtype === "theory")).toHaveLength(8);
+  });
+
+  it("kategorie z wagą 0 nie łatają braków (limit = pula włączonych)", () => {
+    const snap = makeSnapshot();
+    const session = composeLearningSession(snap, ["mix"], newGenState(), mulberry32(2), {
+      models: 0,
+      technical: 0,
+      dekory: 0,
+      left_right: 100,
+      theory: 0,
+    });
+    // tylko 12 pozycji lewe/prawe — sesja jest krótsza, ale „czysta”
+    expect(session).toHaveLength(12);
+    expect(session.every((q) => q.qtype === "left_right")).toBe(true);
   });
 });

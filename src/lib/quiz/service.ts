@@ -7,6 +7,7 @@ import {
   signImagePaths,
 } from "@/lib/db/catalog";
 import { createAdminClient } from "@/lib/db/server";
+import { getQuestionMix } from "@/lib/db/settings";
 import {
   CHALLENGE_BATCH_SIZE,
   challengeOverComment,
@@ -311,9 +312,10 @@ export async function startSession(
     }
   }
 
-  const [snapshot, recent] = await Promise.all([
+  const [snapshot, recent, mix] = await Promise.all([
     loadCatalogSnapshot(db),
     recentTheoryIds(db, userId),
+    getQuestionMix(),
   ]);
   const state = newGenState({ recentTheoryIds: recent });
   const rng = randomRng();
@@ -321,8 +323,8 @@ export async function startSession(
   const picked = categories?.length ? categories : (["mix"] as Category[]);
   const questions =
     mode === "learning"
-      ? composeLearningSession(snapshot, picked, state, rng)
-      : composeChallengeBatch(snapshot, state, rng);
+      ? composeLearningSession(snapshot, picked, state, rng, mix)
+      : composeChallengeBatch(snapshot, state, rng, CHALLENGE_BATCH_SIZE, mix);
 
   if (questions.length === 0) throw new QuizError("no_questions", 503);
 
@@ -424,9 +426,12 @@ async function startDailySession(
 
   if (!daily) {
     // Leniwa, deterministyczna generacja; unikat quiz_date czyni ją race-safe.
-    const snapshot = await loadCatalogSnapshot(db);
+    const [snapshot, mix] = await Promise.all([
+      loadCatalogSnapshot(db),
+      getQuestionMix(),
+    ]);
     const rng = mulberry32(seedFromString(`quizdre-daily-${today}`));
-    const questions = composeDailyQuiz(snapshot, newGenState(), rng);
+    const questions = composeDailyQuiz(snapshot, newGenState(), rng, mix);
     if (questions.length === 0) throw new QuizError("no_questions", 503);
     await db
       .from("daily_quiz")
@@ -581,9 +586,10 @@ async function extendChallenge(
     if ("index" in ca) letterCounts[ca.index] += 1;
   }
 
-  const [snapshot, recent] = await Promise.all([
+  const [snapshot, recent, mix] = await Promise.all([
     loadCatalogSnapshot(db),
     recentTheoryIds(db, userId),
+    getQuestionMix(),
   ]);
   const state = newGenState({
     usedKeys,
@@ -592,7 +598,13 @@ async function extendChallenge(
     letterCounts,
     recentTheoryIds: recent,
   });
-  const batch = composeChallengeBatch(snapshot, state, randomRng());
+  const batch = composeChallengeBatch(
+    snapshot,
+    state,
+    randomRng(),
+    CHALLENGE_BATCH_SIZE,
+    mix,
+  );
   if (batch.length === 0) return;
 
   const { error } = await db.rpc("append_questions", {
