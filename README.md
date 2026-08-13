@@ -36,7 +36,7 @@ Odpowiedzi, punktacja i czas liczone są wyłącznie server-side (funkcje SQL
 
 1. Załóż projekt na [supabase.com](https://supabase.com) (region EU).
 2. W **SQL Editor** wykonaj po kolei pliki z `supabase/migrations/`
-   (0001 → 0010), albo użyj CLI: `supabase db push`.
+   (0001 → 0012), albo użyj CLI: `supabase db push`.
 3. **Authentication → Providers**: włącz **Email** (na start możesz wyłączyć
    „Confirm email”). Logowanie **Google** skonfigurujesz w sekcji 4 —
    większość zrobi za Ciebie skrypt.
@@ -183,8 +183,15 @@ on conflict do nothing;
 ```
 
 Weryfikacja: Ustawienia → karta „Konto” pokazuje chip „Administrator”
-oraz przycisk **„Panel admina”** (`/admin`) — CRUD pytań teoretycznych
-i tabela użytkowników (logowania, aktywność, seria, XP, celność).
+oraz przycisk **„Panel admina”** (`/admin`; skrót 🛡️ jest też w górnym
+pasku) — CRUD pytań teoretycznych, globalne proporcje pytań i tabela
+użytkowników (logowania, aktywność, seria, XP, celność).
+
+W tabeli użytkowników **„Usuń”** kasuje konto wraz z całym postępem
+(XP, odznaki, historia sesji, wyniki w rankingach) — potwierdzenie przez
+przepisanie adresu, własnego konta usunąć nie można. Zwolniony e-mail
+wraca do obiegu, więc da się nim ponownie przejść rejestrację — to
+ścieżka do testowania onboardingu na koncie testowym.
 Nowa rola w przyszłości = `insert into roles (name, description) …` —
 bez zmiany schematu.
 

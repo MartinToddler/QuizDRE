@@ -90,6 +90,57 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
   return rows.sort((a, b) => b.totalXp - a.totalXp);
 }
 
+/**
+ * Trwałe usunięcie konta wraz z CAŁYM postępem gry (kaskada z auth.users:
+ * profil, statystyki, XP, odznaki, misje, sesje, subskrypcje push, role).
+ * Zwolniony e-mail można natychmiast zarejestrować ponownie — stąd użycie
+ * przy testach rejestracji.
+ *
+ * Wołać WYŁĄCZNIE po sprawdzeniu roli admina. `expectedEmail` to adres
+ * potwierdzony w UI — serwer weryfikuje, że nadal należy do wskazanego
+ * konta (ochrona przed nieaktualną listą).
+ */
+export async function deleteUserAccount(
+  targetId: string,
+  actorId: string,
+  expectedEmail: string,
+): Promise<{ deletedEmail?: string; error?: string }> {
+  if (targetId === actorId) {
+    return { error: "Nie można usunąć własnego konta." };
+  }
+  const db = createAdminClient();
+  if (!db) return { error: "Brak konfiguracji Supabase" };
+
+  const { data: target, error: lookupError } =
+    await db.auth.admin.getUserById(targetId);
+  if (lookupError || !target?.user) {
+    return { error: "Nie znaleziono konta — odśwież listę." };
+  }
+  const email = target.user.email ?? "";
+  if (email.toLowerCase() !== expectedEmail.trim().toLowerCase()) {
+    return {
+      error: "Adres nie zgadza się z kontem — odśwież listę i spróbuj ponownie.",
+    };
+  }
+
+  const { error } = await db.auth.admin.deleteUser(targetId);
+  if (error) return { error: `Nie udało się usunąć konta: ${error.message}` };
+
+  // Kontrola kaskady — lepiej jawny błąd niż ciche „usunięto”.
+  const { data: leftover } = await db
+    .from("profiles")
+    .select("id")
+    .eq("id", targetId)
+    .maybeSingle();
+  if (leftover) {
+    return {
+      error:
+        "Konto usunięte z logowania, ale profil pozostał — sprawdź migrację 0012.",
+    };
+  }
+  return { deletedEmail: email };
+}
+
 /** Liczba osób z aktywnością w quizie w ostatnich N dniach. */
 export function countActiveSince(users: AdminUserRow[], days: number): number {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;

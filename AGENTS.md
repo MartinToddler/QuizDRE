@@ -46,7 +46,11 @@ Aplikacja quizowa do szkolenia z produktów DRE (drzwi). Język UI: polski.
    odczyt z bazy, nie JWT; `has_role()` w SQL pod RLS przyszłych tabel
    panelu admina. Panel: `/admin` — KAŻDA strona gate'owana
    `requireAdminPage()`, server actions `assertAdmin()`
-   (`src/lib/admin-guard.ts`).
+   (`src/lib/admin-guard.ts`). Usuwanie konta: `deleteUserAccount()` —
+   service role, kaskada z `auth.users` czyści CAŁY postęp, bez
+   self-delete, z potwierdzeniem e-maila; FK „autorstwa”
+   (`granted_by`/`updated_by`) mają `on delete set null` (0012) — bez
+   tego delete pada na FK (pilnuje tego blok 11 w `smoke.sql`).
 8. Proporcje pytań są GLOBALNE: `app_settings.question_mix` (0010, tabela
    tylko dla service role) → `getQuestionMix()` w `src/lib/db/settings.ts`,
    panel `/admin/proporcje`. Silnik dostaje je parametrem `mix` w

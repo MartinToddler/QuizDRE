@@ -471,4 +471,81 @@ begin
 end $$;
 reset role;
 
+-- ------------------------------------------------------------------
+-- 11. Usuwanie konta (0012): kaskada czyści CAŁY postęp, nic nie blokuje
+-- ------------------------------------------------------------------
+insert into auth.users (email) values ('do-usuniecia@dre.pl') returning id as uidd
+\gset
+select set_config('test.uidd', :'uidd', false);
+
+do $$
+declare
+  v_del uuid := current_setting('test.uidd')::uuid;
+  v_keep uuid := current_setting('test.uid')::uuid;
+  v_sid uuid;
+  v_others_before int;
+  v_others_after int;
+begin
+  -- pełny postęp konta do usunięcia
+  v_sid := public.create_session(v_del, 'learning', 'mix', null,
+    '[{"seq":1,"qtype":"theory","dedupeKey":"d1","payload":{},"correctAnswer":{"index":0},"explanation":null,"imagePath":null}]'::jsonb);
+  perform public.mark_question_served(v_del, v_sid, 1);
+  update public.session_questions set served_at = now() - interval '3 seconds'
+   where session_id = v_sid and seq = 1;
+  perform public.submit_answer(v_del, v_sid, 1, '{"index":0}'::jsonb);
+  perform public.finish_session(v_del, v_sid);
+  insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+  values (v_del, 'https://push.example/x', 'k', 'a');
+  insert into public.notification_log (user_id, kind, sent_on)
+  values (v_del, 'morning', current_date);
+  insert into public.mission_completions (user_id, day_warsaw, mission_code)
+  values (v_del, current_date, 'daily_quiz_done');
+  -- to konto nadaje rolę komuś innemu i zapisuje ustawienia (blokery FK!)
+  insert into public.user_roles (user_id, role, granted_by)
+  values (v_keep, 'admin', v_del)
+  on conflict (user_id, role) do update set granted_by = v_del;
+  update public.app_settings set updated_by = v_del where key = 'question_mix';
+
+  assert (select count(*) from public.quiz_sessions where user_id = v_del) = 1;
+  assert (select count(*) from public.xp_events where user_id = v_del) > 0;
+  assert (select count(*) from public.user_badges where user_id = v_del) > 0;
+  select count(*) into v_others_before from public.quiz_sessions where user_id = v_keep;
+
+  -- właściwa operacja panelu: usunięcie konta z auth.users
+  delete from auth.users where id = v_del;
+
+  assert (select count(*) from public.profiles where id = v_del) = 0,
+    'profil usunięty (kaskada z auth.users)';
+  assert (select count(*) from public.user_stats where user_id = v_del) = 0,
+    'statystyki usunięte';
+  assert (select count(*) from public.quiz_sessions where user_id = v_del) = 0,
+    'sesje usunięte';
+  assert (select count(*) from public.session_questions sq
+           join public.quiz_sessions s on s.id = sq.session_id
+          where s.user_id = v_del) = 0, 'pytania sesji usunięte';
+  assert (select count(*) from public.xp_events where user_id = v_del) = 0,
+    'XP usunięte (rankingi nie zobaczą konta)';
+  assert (select count(*) from public.user_badges where user_id = v_del) = 0,
+    'odznaki usunięte';
+  assert (select count(*) from public.mission_completions where user_id = v_del) = 0,
+    'misje usunięte';
+  assert (select count(*) from public.push_subscriptions where user_id = v_del) = 0,
+    'subskrypcje push usunięte';
+  assert (select count(*) from public.notification_log where user_id = v_del) = 0,
+    'log powiadomień usunięty';
+
+  -- autorstwo „odczepione”, wpisy zostają (0012: on delete set null)
+  assert (select granted_by from public.user_roles
+           where user_id = v_keep and role = 'admin') is null,
+    'granted_by wyzerowane, rola zachowana';
+  assert (select count(*) from public.user_roles where user_id = v_keep) = 1,
+    'rola innego użytkownika nietknięta';
+  assert (select updated_by from public.app_settings where key = 'question_mix') is null,
+    'updated_by wyzerowane, ustawienie zachowane';
+
+  -- dane pozostałych użytkowników bez zmian
+  select count(*) into v_others_after from public.quiz_sessions where user_id = v_keep;
+  assert v_others_before = v_others_after, 'sesje innych użytkowników nietknięte';
+end $$;
+
 select 'SMOKE TEST OK' as result;

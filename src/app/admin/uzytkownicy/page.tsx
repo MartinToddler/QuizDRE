@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { requireAdminPage } from "@/lib/admin-guard";
 import { countActiveSince, listUsersWithStats } from "@/lib/db/admin-users";
 import { rankForXp } from "@/lib/engine";
+import { DeleteUserButton } from "./delete-user-button";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ function formatDate(iso: string | null): string {
 }
 
 export default async function AdminUsersPage() {
-  await requireAdminPage();
+  const admin = await requireAdminPage();
   const users = await listUsersWithStats();
 
   const activeWeek = countActiveSince(users, 7);
@@ -41,6 +42,7 @@ export default async function AdminUsersPage() {
               <th className="px-4 py-3 text-right">XP</th>
               <th className="px-4 py-3 text-right">Odpowiedzi</th>
               <th className="px-4 py-3 text-right">Celność</th>
+              <th className="px-4 py-3 text-right">Konto</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -88,6 +90,15 @@ export default async function AdminUsersPage() {
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    {u.id === admin.id ? (
+                      <span className="text-xs text-gray-400">to Ty</span>
+                    ) : (
+                      <div className="flex justify-end">
+                        <DeleteUserButton userId={u.id} email={u.email} />
+                      </div>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -103,6 +114,12 @@ export default async function AdminUsersPage() {
       <p className="mt-3 text-xs text-gray-400">
         Ostatnia aktywność = ostatnia odpowiedź w quizie (samo logowanie jej nie
         zmienia). Celność: zielona ≥ 80%, bursztynowa ≥ 60%.
+      </p>
+      <p className="mt-1.5 text-xs text-gray-400">
+        „Usuń” kasuje konto wraz z całym postępem (XP, odznaki, historia sesji,
+        wyniki w rankingach) — bez możliwości cofnięcia. Adres e-mail wraca do
+        obiegu, więc można nim od razu przejść rejestrację od zera. Wymagane
+        potwierdzenie przez przepisanie adresu; własnego konta usunąć nie można.
       </p>
     </div>
   );
