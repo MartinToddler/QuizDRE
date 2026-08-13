@@ -1,13 +1,17 @@
 import { Card } from "@/components/ui/card";
 import { requireAdminPage } from "@/lib/admin-guard";
-import { getQuestionMix } from "@/lib/db/settings";
+import { getDailyQuizSize, getQuestionMix } from "@/lib/db/settings";
+import { DailySizeForm } from "./daily-size-form";
 import { MixForm } from "./mix-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminMixPage() {
   await requireAdminPage();
-  const mix = await getQuestionMix();
+  const [mix, dailySize] = await Promise.all([
+    getQuestionMix(),
+    getDailyQuizSize(),
+  ]);
 
   return (
     <div className="mx-auto max-w-xl">
@@ -22,14 +26,24 @@ export default async function AdminMixPage() {
         <MixForm initial={mix} />
       </Card>
 
-      <div className="mt-4 space-y-1.5 text-xs text-gray-400">
+      <h2 className="mt-8 text-xl font-bold">📅 Quiz Dnia</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        Ile pytań ma dzienny zestaw (5–30). Wszyscy grają ten sam quiz, jedno
+        podejście.
+      </p>
+      <Card className="mt-3">
+        <DailySizeForm initial={dailySize} />
+      </Card>
+
+      <div className="mt-8 space-y-1.5 text-xs text-gray-400">
         <p>
           Waga 0 wyłącza kategorię z losowania. W trybie nauki użytkownik może
           nadal wybrać taką kategorię wprost — wtedy dostanie z niej pytania.
         </p>
         <p>
           Zmiany działają od następnej rozpoczętej sesji. Quiz Dnia jest
-          generowany raz na dobę, więc nowe proporcje obejmą go od jutra.
+          generowany raz na dobę, więc nowe proporcje i długość obejmą go od
+          jutra (dzisiejszy zestaw jest już rozdany).
         </p>
         <p>
           Pula pytań też ma znaczenie: gdy kategoria wyczerpie swoje pytania,

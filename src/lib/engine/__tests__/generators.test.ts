@@ -440,6 +440,21 @@ describe("kompozycja sesji", () => {
     expect(byType.left_right).toBe(1);
   });
 
+  it("Quiz Dnia ma długość z ustawień admina", () => {
+    const snap = makeSnapshot();
+    for (const size of [5, 15, 30]) {
+      const quiz = composeDailyQuiz(
+        snap,
+        newGenState(),
+        mulberry32(42),
+        DEFAULT_QUESTION_MIX,
+        size,
+      );
+      expect(quiz).toHaveLength(size);
+      expect(new Set(quiz.map((q) => q.dedupeKey)).size).toBe(size);
+    }
+  });
+
   it("Quiz Dnia respektuje wyłączoną kategorię (waga 0)", () => {
     const snap = makeSnapshot();
     const quiz = composeDailyQuiz(snap, newGenState(), mulberry32(7), {

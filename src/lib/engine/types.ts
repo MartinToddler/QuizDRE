@@ -66,6 +66,15 @@ export const DEFAULT_QUESTION_MIX: QuestionMix = {
   theory: 20,
 };
 
+/** Dozwolona długość Quizu Dnia (ustawienie admina). */
+export const DAILY_QUIZ_SIZE_MIN = 5;
+export const DAILY_QUIZ_SIZE_MAX = 30;
+export const dailyQuizSizeSchema = z.coerce
+  .number()
+  .int()
+  .min(DAILY_QUIZ_SIZE_MIN)
+  .max(DAILY_QUIZ_SIZE_MAX);
+
 export const questionMixSchema = z
   .object({
     models: z.coerce.number().int().min(0).max(100),

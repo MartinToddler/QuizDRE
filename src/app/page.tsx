@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/db/server";
 import { DAILY_GOAL, getDashboard } from "@/lib/db/dashboard";
+import { getDailyQuizSize } from "@/lib/db/settings";
 import { rankForXp } from "@/lib/engine";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,10 @@ export default async function HomePage() {
     .maybeSingle();
   if (!profile?.onboarded_at) redirect("/onboarding");
 
-  const data = await getDashboard(user.id);
+  const [data, dailySize] = await Promise.all([
+    getDashboard(user.id),
+    getDailyQuizSize(),
+  ]);
   if (!data) return <SetupNotice />;
 
   const rank = rankForXp(data.totalXp);
@@ -94,7 +98,7 @@ export default async function HomePage() {
               <p className="mt-1 text-sm text-gray-600">
                 {data.dailyQuizDone
                   ? "Jutro nowy zestaw. Sprawdź, jak wypadasz na tle innych."
-                  : "10 pytań, jedna próba, wszyscy grają to samo. Zestaw znika o północy."}
+                  : `${dailySize} pytań, jedna próba, wszyscy grają to samo. Zestaw znika o północy.`}
               </p>
             </div>
             {data.dailyQuizDone ? (

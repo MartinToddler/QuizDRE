@@ -7,7 +7,7 @@ import {
   signImagePaths,
 } from "@/lib/db/catalog";
 import { createAdminClient } from "@/lib/db/server";
-import { getQuestionMix } from "@/lib/db/settings";
+import { getDailyQuizSize, getQuestionMix } from "@/lib/db/settings";
 import {
   CHALLENGE_BATCH_SIZE,
   challengeOverComment,
@@ -426,12 +426,13 @@ async function startDailySession(
 
   if (!daily) {
     // Leniwa, deterministyczna generacja; unikat quiz_date czyni ją race-safe.
-    const [snapshot, mix] = await Promise.all([
+    const [snapshot, mix, size] = await Promise.all([
       loadCatalogSnapshot(db),
       getQuestionMix(),
+      getDailyQuizSize(),
     ]);
     const rng = mulberry32(seedFromString(`quizdre-daily-${today}`));
-    const questions = composeDailyQuiz(snapshot, newGenState(), rng, mix);
+    const questions = composeDailyQuiz(snapshot, newGenState(), rng, mix, size);
     if (questions.length === 0) throw new QuizError("no_questions", 503);
     await db
       .from("daily_quiz")

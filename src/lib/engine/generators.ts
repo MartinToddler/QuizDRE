@@ -682,18 +682,22 @@ export function composeChallengeBatch(
   return out;
 }
 
-/** Zestaw Quizu Dnia: 10 pytań wg globalnych proporcji (deterministycznie). */
+/**
+ * Zestaw Quizu Dnia wg globalnych proporcji (deterministycznie z seeda daty).
+ * Długość to ustawienie admina (`app_settings.daily_quiz_size`).
+ */
 export function composeDailyQuiz(
   snapshot: CatalogSnapshot,
   state: GenState,
   rng: Rng,
   mix: QuestionMix = DEFAULT_QUESTION_MIX,
+  size: number = DAILY_QUIZ_SIZE,
 ): GeneratedQuestion[] {
   const units = buildUnits(snapshot, ["mix"], mix);
   if (units.length === 0) return [];
 
   const wanted = Math.min(
-    DAILY_QUIZ_SIZE,
+    Math.max(1, size),
     units.reduce((n, u) => n + u.available, 0),
   );
   const slots = allocateSlots(units, wanted);

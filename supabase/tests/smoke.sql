@@ -444,6 +444,9 @@ begin
   assert (select value from public.app_settings where key = 'question_mix')
          ? 'technical',
     'seed question_mix zawiera wagi kategorii';
+  assert (select (value)::int from public.app_settings
+           where key = 'daily_quiz_size') = 10,
+    'seed daily_quiz_size = 10 (0011)';
 
   update public.app_settings
      set value = '{"models":10,"technical":50,"dekory":0,"left_right":20,"theory":20}'::jsonb
